@@ -94,7 +94,7 @@ not only for the three cases below. See `NON_CLAIMS.md`.
 Running `make demo` prints all three:
 
 ```
-Case 1: Wirecard cash-existence assertion (Section 6.1 / Section 7)
+Case 1: Wirecard cash-existence assertion (Section 7.1 / Section 7)
 ----------------------------------------------------------------------
   Assertion:            EUR 1.9bn held in Philippine trustee accounts
   Observed evidence:    bank exists, account identifier supplied only

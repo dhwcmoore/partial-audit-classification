@@ -1,8 +1,8 @@
 (** Base.v — the EvidenceState and AuditUse vocabulary.
 
-    This is the six-state classification vocabulary defined in Section 3
+    This is the six-state classification vocabulary defined in Section 2
     of "A Discipline of Partial Audit Classification" (submitted, STTT)
-    and Section 3.2 / Appendix A of "Boundary Discipline for Accounting
+    and Section 5.2 / Appendix A of "Boundary Discipline for Accounting
     Information Systems" (submitted, IJDAR). It is declared here exactly
     once and used by every other module in this development, so that
     nothing downstream is a re-encoding of it. *)

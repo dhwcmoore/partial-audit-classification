@@ -51,7 +51,7 @@ let wirecard_full      : wfact list =
     AuthenticatedChannel ]
 
 let run_wirecard () =
-  print_endline "Case 1: Wirecard cash-existence assertion (Section 6.1 / Section 7)";
+  print_endline "Case 1: Wirecard cash-existence assertion (Section 7.1 / Section 7)";
   rule 70;
   let observed_state =
     boundary_state wfeq wirecard_observed CashExistencePhilippineTrustee wirecard_boundary in
@@ -84,7 +84,7 @@ let ca_boundary : (cafact, caassertion) boundarySpec =
 let ca_observed : cafact list = [ ReviewedByAnalyst 0; ReviewedByAnalyst 1 ]
 
 let run_continuous_auditing () =
-  print_endline "Case 2: Continuous auditing exception queue (Section 6.2 / Section 8)";
+  print_endline "Case 2: Continuous auditing exception queue (Section 7.2 / Section 8)";
   rule 70;
   let states = List.init 10 (fun n -> (n, boundary_state cafeq ca_observed (Txn n) ca_boundary)) in
   let residuals =
@@ -113,7 +113,7 @@ type rendered_state = RNumeric of int | RUndefined
 let disciplined_render = function Score n -> RNumeric n | ScoreUnknown -> RUndefined
 
 let run_sql_unknown () =
-  print_endline "Case 3: SQL Unknown collapsing at the reporting layer (Section 6.3 / Section 5.3)";
+  print_endline "Case 3: SQL Unknown collapsing at the reporting layer (Section 7.3 / Section 2.3)";
   rule 70;
   Printf.printf "  silently_converted_render(Unknown) = %d\n" (silently_converted_render ScoreUnknown);
   Printf.printf "  silently_converted_render(Score 0) = %d   (indistinguishable from Unknown)\n"

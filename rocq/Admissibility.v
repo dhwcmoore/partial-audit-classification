@@ -3,8 +3,8 @@ Import ListNotations.
 Require Import PAC.Base.
 Require Import PAC.Boundary.
 
-(** Admissibility.v — Definition 2.1 (Admissibility) and Theorem 1
-    (Default-Free Admissibility) with its Corollary (Contrapositive),
+(** Admissibility.v — the Admissibility definition (Section 3) and
+    Theorem 1 (Default-Free Admissibility) with its Corollary (Contrapositive),
     stated identically in both papers ("For any audit opinion O, if O is
     unqualified, then every material assertion on which O depends is
     classified Verified under the declared boundary specification and

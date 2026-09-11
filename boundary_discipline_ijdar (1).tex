@@ -1,0 +1,671 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{framed}
+\usepackage{eurosym}
+\usepackage[authoryear,round]{natbib}
+\usepackage[hidelinks]{hyperref}
+\usepackage{microtype}
+
+\lstdefinelanguage{yaml}{
+  keywords={true,false,null},
+  sensitive=false,
+  comment=[l]{\#},
+  morestring=[b]',
+  morestring=[b]"
+}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  commentstyle=\color{gray},
+  stringstyle=\color{black},
+  breaklines=true,
+  frame=single,
+  framesep=4pt,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  captionpos=b
+}
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{corollary}{Corollary}[section]
+\newtheorem{principle}{Principle}[section]
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[section]
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}[section]
+
+\title{Boundary Discipline for Accounting Information Systems:\\
+On the Correct Treatment of Undefined Audit Assertions}
+
+\author{}
+\date{}
+
+\begin{document}
+
+% --------------------------------------------------------------------
+% Title page (separate page, author-identified). Detach this page before
+% sending the manuscript out for blind review, per IJDAR's anonymous
+% review policy; the manuscript body below carries no author identification.
+% --------------------------------------------------------------------
+\begin{titlepage}
+\centering
+\vspace*{2cm}
+{\LARGE\bfseries Boundary Discipline for Accounting Information Systems:\\
+On the Correct Treatment of Undefined Audit Assertions\par}
+\vspace{2cm}
+{\large Duston Moore, PhD\par}
+\vspace{0.5em}
+{\large Independent Researcher\par}
+{\large Edmonton, Alberta, Canada\par}
+\vspace{0.5em}
+{\large Corresponding author e-mail: \texttt{dhwcmoore@gmail.com}\par}
+\vspace{2cm}
+{\large July 2026\par}
+\thispagestyle{empty}
+\end{titlepage}
+
+\newpage
+\pagenumbering{arabic}
+
+\begin{abstract}
+Auditing and accounting information systems increasingly rely on automated classification. These systems routinely encounter cases in which evidence is missing, jurisdictionally unavailable, or inconclusive. The dangerous failure mode is not uncertainty itself but the silent conversion of unresolved cases into affirmative classifications, where assertions that could not be verified are operationally treated as accepted because the workflow demands a binary output. Audit theory recognises evidential insufficiency through scope limitations and modified opinions; accounting information systems research studies continuous auditing and exception handling; formal and runtime verification methods supply multi-valued mechanisms for inconclusive states. No unified audit-classification methodology joins these resources. This paper develops such a methodology, termed Boundary Discipline, resting on one invariant: no audit conclusion may depend on a material assertion whose verification state is undefined. Its components are explicit verification boundary specifications, a multi-valued classification scheme in which \textsf{Undefined} is a success state rather than an error condition, a Verification Balance Sheet accounting for what verification actually establishes, a Risk Assignment Register ensuring every residual is owned or escalated, a composition rule under which an opinion inherits its weakest unresolved dependency, and a Default-Free Admissibility theorem showing the invariant is formally specifiable. The Wirecard collapse serves as the running case, and the silent absorption of deprioritised exceptions in continuous auditing serves as the ordinary-scale analogue. Implications for auditing standards, inspection protocols, and continuous monitoring architectures are discussed.
+\end{abstract}
+
+\noindent\textbf{Keywords:} accounting information systems; continuous auditing; audit evidence; classification integrity; formal verification
+
+\medskip
+\noindent\textbf{Data availability statement:} This is a conceptual and methodological paper. It does not analyse a proprietary or empirical dataset. The illustrative boundary specification and classification pseudocode presented in the paper are original artefacts of the manuscript and are reproduced here in full. The admissibility, residual-preservation, and admission-separation theorems of Section~\ref{sec:formal} are additionally formalised and machine-checked, generally rather than only for the illustrative cases of Sections~\ref{sec:wirecard} and~\ref{sec:ca-case}, in a companion Coq/Rocq development and extracted OCaml classifier; \emph{[repository URL to be inserted before submission]}.
+
+\medskip
+\noindent\textbf{Note on a related submission:} A companion manuscript, \emph{A Discipline of Partial Audit Classification: On the Correct Treatment of Undefined Audit Assertions}, has been submitted to the \emph{International Journal on Software Tools for Technology Transfer}. Both manuscripts develop the same central invariant (Principle~\ref{prin:invariant}) and share the Coq/Rocq development described above. The present manuscript addresses an accounting information systems audience: the AIS pipeline architecture, the Verification Balance Sheet, the Risk Assignment Register, and the standards and inspection implications of Sections~\ref{sec:architecture}--\ref{sec:implications} are not treated in the companion submission. The companion submission instead addresses a formal-methods and tooling audience, and takes the mechanised admissibility theorem and its Coq/Rocq development as its central technical contribution rather than as a supporting artefact. We disclose the relationship so that editors and reviewers can evaluate the degree of overlap directly; in our own assessment the two manuscripts share an invariant and a proof artefact but not a contribution, and neither manuscript's findings depend on prior acceptance of the other.
+
+\section{Introduction: Verification Failure and Silent Conversion}
+\label{sec:intro}
+
+Audit systems and accounting information systems classify claims. A management assertion about the existence of a cash balance, a transaction flagged by a continuous monitoring rule, and a field populated in a risk dashboard are all inputs to classification processes whose outputs bind real consequences: unqualified opinions, cleared exception queues, and assurances passed upward to boards and markets.
+
+Classification outside verified domains is dangerous. A classifier that produces an output for every input, including inputs it has no verified authority over, will assign arbitrary or convenient categories to precisely the cases that matter most. In audit settings, the convenient category is acceptance. When verification procedures fail, whether through jurisdictional obstruction, missing third-party data, ambiguous control relationships, or inconclusive automated checks, the surrounding workflow frequently proceeds as though the assertion had been verified. We call this failure mode \emph{silent conversion}: the operational transformation of verification failure into audit acceptance, without an explicit indeterminate, modified, blocked, or escalated classification, and often without any durable trace in the audit trail. The failure has a precise form. It is a type error: an assertion of type \textsf{Undefined} is used where an assertion of type \textsf{Verified} is required, and the remainder of this paper is the discipline that makes the type error inadmissible.
+
+The collapse of Wirecard AG in June 2020 illustrates silent conversion at catastrophic scale \citep{mccrum2022, esma2020}. For over a decade, Ernst \& Young issued unqualified opinions on financial statements containing \officialeuro 1.9 billion in fictitious assets, purportedly held in trustee accounts at Philippine banks. When direct confirmation was finally sought, the banks reported that the account statements were spurious and that neither Wirecard nor its trustees had ever maintained accounts with them. The conventional explanations, inadequate professional scepticism or sophisticated fraud, are insufficient. The deeper problem is structural: the operative audit methodology permitted verification impossibility to be treated as equivalent to verification success. When direct bank confirmation could not be obtained, alternative documentation such as screenshots, intermediary-provided statements, and management representations was accepted as sufficient. The methodology converted cannot verify into verified. This account is independently corroborated by the special investigation conducted for the German Bundestag's Wirecard inquiry committee, which examined Ernst \& Young's own working papers and reported the same substitution of verbal and intermediary assurance for primary confirmation on the relevant balances \citep{beerbaum2020}.
+
+Silent conversion is not confined to spectacular frauds. It occurs in ordinary accounting information systems whenever a continuous auditing dashboard clears deprioritised exceptions that were never investigated, whenever a missing third-party confirmation becomes a no exception noted entry, and whenever a null risk field is treated downstream as zero risk. In each case an epistemic state, namely unresolved, is collapsed into an operational state, namely accepted, because the workflow needs a binary output.
+
+This paper asks a single research question. How do audit systems, accounting information systems, and formal verification methods handle verification failure, and what kind of classification architecture is needed to prevent unverifiable assertions from being silently converted into accepted audit conclusions?
+
+The answer developed here is a methodology we term \emph{Boundary Discipline}. Its components are explicit verification boundary specifications declaring which methods produce valid evidence for which assertion classes in which jurisdictions; a multi-valued classification scheme in which \textsf{Undefined} is a first-class output rather than an error condition; a Verification Balance Sheet that accounts precisely for what a verification procedure establishes and what it leaves unresolved; a Risk Assignment Register that ensures every residual is owned, disclosed, or escalated; and default-free admission logic, stated in quantified logical form, showing that the classification rule preventing an unverifiable material assertion from being admitted as verified is formally specifiable and, in principle, machine-checkable.
+
+One rule governs everything that follows, and it is stated before any component is described.
+
+\begin{principle}[Central Invariant]
+\label{prin:invariant}
+No audit conclusion may depend on a material assertion whose verification state is undefined.
+\end{principle}
+
+In symbolic form:
+
+\begin{lstlisting}[numbers=none]
+Admissible(Opinion) =>
+  for every material assertion a used by Opinion:
+      state(a) = Verified
+\end{lstlisting}
+
+Equivalently, and more sharply:
+
+\begin{lstlisting}[numbers=none]
+state(a) = Undefined => a is inadmissible for an unqualified opinion
+\end{lstlisting}
+
+Every component of the methodology is support for this invariant. The boundary specifications compute the classification states, the residual register preserves the non-affirmative ones, the composition rule propagates them upward, and the admissibility theorem of Section~\ref{sec:formal} excludes any unqualified conclusion that depends on an \textsf{Undefined} material assertion.
+
+The paper proceeds as follows. Section~\ref{sec:lit} reviews how audit theory, accounting information systems research, database systems, and runtime verification each address part of the verification failure problem, and identifies the gap that Boundary Discipline fills. Section~\ref{sec:concepts} defines the core concepts. Section~\ref{sec:principles} states design principles for default-free audit classification. Section~\ref{sec:architecture} presents Boundary Discipline as an accounting information systems architecture. Section~\ref{sec:formal} gives the formal specification and proof-of-concept. Sections~\ref{sec:wirecard} and~\ref{sec:ca-case} apply the framework to the Wirecard case and to continuous auditing exceptions respectively. Section~\ref{sec:implications} discusses implications for standards and inspection. Section~\ref{sec:limitations} states limitations and future work, and Section~\ref{sec:conclusion} concludes.
+
+\subsection*{Core Terms}
+
+\begin{framed}
+\noindent\textbf{Verification failure} occurs when a system cannot determine whether a claim is verified or refuted within the evidence, authority, and observation boundaries available to it.
+
+\medskip
+\noindent\textbf{Silent conversion} occurs when a verification failure is operationally treated as acceptance without an explicit \textsf{Undefined}, modified, blocked, or escalated classification.
+
+\medskip
+\noindent\textbf{Implicit default} is the local rule, convention, or implementation path by which silent conversion occurs.
+
+\medskip
+\noindent\textbf{Boundary} is the demarcation between regions where a verification procedure produces valid results and regions where it does not.
+
+\medskip
+\noindent\textbf{Undefined} is the classification result when an input falls outside all defined verification boundaries.
+
+\medskip
+\noindent\textbf{Residual} is what remains unverified after a verification procedure completes, including both known limitations and structural blind spots.
+
+\medskip
+\noindent\textbf{Risk assignment} is the process of identifying who bears responsibility for losses if a verification residual materialises as actual error.
+
+\medskip
+\noindent\textbf{Admission} is the act by which an independent verifier accepts a proposed classification as binding for audit consequence.
+\end{framed}
+
+\section{Verification Failure Across Auditing, AIS, and Formal Methods}
+\label{sec:lit}
+
+The problem addressed in this paper is not newly invented. Each of the literatures reviewed below has confronted verification failure within its own domain and has developed partial responses. What is missing is a methodology that joins these responses into a single classification architecture for audit information systems.
+
+\subsection{Audit Evidence, Professional Scepticism, and Verification Failure}
+\label{sec:lit-audit}
+
+Audit theory has long recognised that evidential insufficiency is a distinct epistemic condition rather than a weak form of assurance. Mautz and Sharaf's foundational treatment of auditing as an evidence-gathering discipline distinguishes the propositions an auditor can establish from the propositions an auditor merely fails to refute \citep{mautz1961}. The audit quality and audit risk literature likewise treats the sufficiency and appropriateness of evidence as the central determinant of the assurance an engagement can support \citep{knechel2013}. The professional scepticism literature develops this distinction behaviourally, characterising scepticism as a disposition to withhold conclusion until sufficient appropriate evidence is obtained rather than as generalised distrust \citep{nelson2009, hurtt2010}.
+
+The standards themselves encode a partial recognition of verification failure. Under ISA 705 and its national analogues, an inability to obtain sufficient appropriate audit evidence constitutes a scope limitation, and a scope limitation affecting material items requires a qualified opinion or a disclaimer of opinion \citep{isa705}. The national analogues are not merely formal restatements: Canada's CAS 705 and the equivalent PCAOB standard governing departures from an unqualified opinion, AS 3105, encode the same qualified-versus-disclaimer distinction as a function of whether the possible effects of undetected misstatement are material but not pervasive, or both material and pervasive \citep{cas705, pcaob3105}, which is precisely the materiality-conditioned branching that the boundary specification in Section~\ref{sec:formal} renders machine-checkable. The empirical literature on modified opinion decisions shows that the modification channel operates systematically in practice, though its use is shaped by client characteristics and auditor incentives rather than governed by any classification architecture \citep{habib2013}. The logical structure of the modified opinion regime is instructive: it acknowledges that failed verification is not verification, and it provides an output channel, the modified opinion, that is distinct from acceptance.
+
+Two weaknesses limit this recognition in practice. First, the standards permit alternative evidence pathways whose epistemic grade is markedly lower than the primary procedure they replace, most notably reliance on management representations when third-party confirmation is unavailable. The distinction between absence of evidence and evidence of absence is preserved in principle but eroded in the operative decision procedure. Second, the recognition is behavioural and documentary rather than architectural. Nothing in the classification logic of the audit forces a scope limitation to be recorded when verification fails; the conversion of an unresolved assertion into an accepted one can occur silently in working papers, judgement calls, and system defaults. Audit theory names the epistemic condition but supplies no formal classification architecture that makes the condition impossible to ignore.
+
+\subsection{Accounting Information Systems and the Automation of Audit Classification}
+\label{sec:lit-ais}
+
+The accounting information systems literature relocates the verification problem from human judgement to system architecture. Continuous auditing and continuous monitoring research, initiated by Vasarhelyi and Halper's work on continuous process auditing and developed extensively since, envisions audit assurance produced by automated rules operating over transaction streams \citep{vasarhelyi1991, kogan1999, alles2006}. In such systems, classification is performed by exception logic: transactions that violate configured rules are flagged, and flagged items enter queues for investigation.
+
+This literature has documented, though not always in these terms, the conditions under which automated exception handling silently converts verification failure into acceptance. Exception volumes routinely exceed investigative capacity, and prioritisation schemes, thresholds, and alert-fatigue mitigation determine which flags receive attention \citep{alles2006, issa2016}. More recent work on audit data analytics shows that auditors, managers, and regulators jointly shape how analytic tools are adopted and relied upon, so that the classification problem now extends across the full engagement rather than residing in any single monitoring system \citep{austin2021}. An exception that is deprioritised remains epistemically unverified. Yet because operations continue and dashboards are cleared, the surrounding organisation treats the underlying assertion as accepted. The dashboard state, cleared, is read as the epistemic state, verified, when in fact the two have come apart. This is silent conversion implemented in workflow rather than in judgement.
+
+The AIS literature thus sees the mechanism at ordinary scale. What it lacks is a classification vocabulary in which deprioritised but uninvestigated exceptions occupy a distinct, durable, consequence-bearing state rather than disappearing into workflow completion.
+
+\subsection{Missing Data, SQL Unknown, and the Loss of Uncertainty at the Application Layer}
+\label{sec:lit-sql}
+
+At the data layer, accounting information systems already possess a primitive version of the machinery this paper proposes. SQL's treatment of missing information through \textsf{NULL} implements a three-valued logic in which comparisons involving missing data evaluate to \textsf{Unknown} rather than to true or false \citep{codd1979}. The database layer, in other words, refuses to convert absence of information into an affirmative truth value.
+
+The problem arises above the database. Application layers, reporting middleware, dashboards, and audit workflows routinely collapse \textsf{Unknown} into a benign binary output: a null risk score rendered as zero, a missing confirmation aggregated as no exception, a filter predicate that silently excludes unresolved rows so that a completeness check passes. The uncertainty that the data layer carefully preserved is destroyed in transit to the point of audit consequence. This is the entire thesis of the present paper in miniature. The technical capacity to represent verification failure exists and is decades old; what is missing is the architectural discipline to preserve that state through every layer that stands between evidence and audit conclusion.
+
+\subsection{Runtime Verification and Multi-Valued Verdicts}
+\label{sec:lit-rv}
+
+Formal methods research confronted a structurally identical problem in runtime verification. A monitor observing a finite execution trace must often render a verdict about a property, such as a temporal logic formula, whose truth may depend on unobserved future behaviour. Classical two-valued semantics forces a premature commitment. The response was to enrich the verdict domain. The logic LTL$_3$ assigns to each finite trace one of three values, true, false, or inconclusive, where the inconclusive verdict records precisely that the observations made so far do not determine the property \citep{bauer2011}. Refinements such as RV-LTL further subdivide the inconclusive region into presumably true and presumably false, permitting operational guidance without permitting the presumptive values to masquerade as definitive ones \citep{bauer2010, leucker2009}.
+
+Runtime verification therefore supplies exactly the formal precedent the audit problem requires: a principled refusal to assign premature truth values on incomplete observations, a machine-checkable semantics for the inconclusive state, and a demonstration that multi-valued verdicts are implementable in monitors that run in production systems. What runtime verification has not done is apply this machinery to audit evidence, where the incomplete trace is not a program execution but an evidence record, and where the consequence of a premature verdict is an audit opinion rather than a property violation report.
+
+\subsection{The Research Gap}
+\label{sec:lit-gap}
+
+The literatures reviewed above partition the problem among themselves. Audit theory recognises evidential insufficiency and provides the modified opinion as an output channel, but supplies no formal classification architecture that makes silent conversion structurally impossible. Accounting information systems research studies automated monitoring and exception processing, and documents the workflow conditions under which unverified items are operationally absorbed as accepted, but lacks a classification vocabulary with durable indeterminate states. Database systems preserve missing information as \textsf{Unknown} at the data layer but permit application layers to destroy that state before it reaches audit consequence. Runtime verification provides multi-valued, machine-checkable semantics for inconclusive verdicts on incomplete observations but has not been applied to audit evidence.
+
+What is missing is an accounting information systems methodology that joins these resources into a default-free audit classification architecture: one in which verification boundaries are explicit, indeterminate states are first-class and durable, residual risk is assigned rather than orphaned, and default-freedom is machine-checkable. The gap can be stated in one sentence: none of these literatures gives accounting information systems a classification architecture that preserves \textsf{Undefined} from the point of verification failure through to audit consequence. Boundary Discipline, developed in the remainder of this paper, is proposed as that architecture. Table~\ref{tab:litmap} summarises the mapping.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{>{\raggedright\arraybackslash}p{2.6cm}>{\raggedright\arraybackslash}p{3.4cm}>{\raggedright\arraybackslash}p{3.6cm}>{\raggedright\arraybackslash}p{4.2cm}}
+\toprule
+\textbf{Domain} & \textbf{Handles uncertainty as} & \textbf{Failure mode} & \textbf{Boundary Discipline adds} \\
+\midrule
+Audit evidence & Scope limitation and modified opinion & Judgement may absorb insufficiency & Explicit \textsf{Undefined} and residual ownership \\
+\addlinespace
+AIS and continuous auditing & Exception queues and thresholds & Ignored exceptions become operationally accepted & Durable unresolved state \\
+\addlinespace
+SQL and database logic & Three-valued \textsf{Unknown} & Application layer collapses \textsf{Unknown} to benign output & Preservation through audit consequence \\
+\addlinespace
+Runtime verification & Inconclusive finite-trace verdict & Not translated into audit systems & Multi-valued audit classification \\
+\addlinespace
+Formal methods & Machine-checked specifications & Rarely tied to audit evidence & Machine-checkable default-freedom \\
+\bottomrule
+\end{tabular}
+\caption{How each domain handles uncertainty, where it fails, and what Boundary Discipline adds.}
+\label{tab:litmap}
+\end{table}
+
+\section{Boundary Discipline: Core Concepts}
+\label{sec:concepts}
+
+This section defines the conceptual apparatus. The two-level vocabulary introduced informally above is now made precise, followed by the accounting instruments that make the vocabulary operational.
+
+\begin{definition}[Verification Failure]
+\label{def:vfail}
+Verification failure occurs when a system cannot determine whether a claim is verified or refuted within the evidence, authority, and observation boundaries available to it.
+\end{definition}
+
+\begin{definition}[Silent Conversion]
+\label{def:silent}
+Silent conversion occurs when a verification failure is operationally treated as acceptance without an explicit \textsf{Undefined}, modified, blocked, or escalated classification.
+\end{definition}
+
+\begin{definition}[Implicit Default]
+\label{def:default}
+An implicit default is a classification rule that applies when explicit verification procedures fail to produce a determinate result, characterised by three properties: it is not formally specified in the verification protocol; it produces affirmative rather than indeterminate outputs; and its application is not recorded in the verification audit trail.
+\end{definition}
+
+Silent conversion is the observable failure mode; the implicit default is the local mechanism by which it occurs. The distinction matters because remediation targets differ. Silent conversion can be produced by an explicit but unrecorded judgement call, by an exception queue whose deprioritisation logic no one reviews, by a middleware coercion of \textsf{NULL} to zero, or by a formally specified rule whose affirmative output is simply wrong for the input class. Boundary Discipline aims at the failure mode, not merely at any one mechanism.
+
+\subsection{The Verification Balance Sheet}
+\label{sec:vbs}
+
+Every verification regime can be characterised by a balance sheet that accounts for what verification actually accomplishes.
+
+\begin{definition}[Verification Balance Sheet]
+\label{def:vbs}
+A Verification Balance Sheet consists of five components. The \emph{Fiat Ground} comprises the assumptions the verification system takes as given without further verification. The \emph{Verified Target} is a precise statement of what successful verification establishes and nothing more. The \emph{Procedure Cost} comprises the resources, in time, money, computation, and institutional overhead, required to complete verification. The \emph{Residuals} comprise what remains unverified after successful completion, including both known limitations and structural blind spots. The \emph{Trust Chain} is the delegation structure showing how the procedure connects to the fiat ground.
+\end{definition}
+
+The balance sheet enforces honesty about verification scope. The Verified Target must be stated with sufficient precision that it is clear what has and has not been established, and the Residuals must enumerate what falls outside the verification boundary, especially items that users might mistakenly assume are covered. A passport check illustrates the discipline. Its Fiat Ground includes the authority of the issuing government and the integrity of the issuance process. Its Verified Target is narrow: a government issued a document with this name and photograph to someone, and the presenter resembles the photograph. Its Residuals include whether the original issuance was correct, whether the document has been tampered with in undetectable ways, and whether the recorded name corresponds to any fact about identity beyond what the government chose to record.
+
+\subsection{The Risk Assignment Register}
+\label{sec:rar}
+
+Verification residuals represent risk, and Boundary Discipline requires that all residual risk be explicitly assigned to an identified owner.
+
+\begin{definition}[Risk Assignment Register]
+\label{def:rar}
+A Risk Assignment Register associates each verification residual with answers to three questions: what is the risk, who owns it, and what is their capacity to bear it. If no owner can be identified for a residual, that fact is itself a first-class finding requiring escalation.
+\end{definition}
+
+\begin{principle}[Risk Ownership]
+\label{prin:ownership}
+In any verification regime, every residual must be either assigned to an identified risk owner with capacity to bear it, or flagged as orphaned and thereby escalated and disclosed, or explicitly priced by parties who choose to trade it.
+\end{principle}
+
+Orphaned risk is systemic fragility waiting to materialise. In the Wirecard case, examined in Section~\ref{sec:wirecard}, the risk that \officialeuro 1.9 billion did not exist was a verification residual that no party owned: the auditor treated it as outside scope, the home regulator treated the entity as outside its banking mandate, the foreign banks had no relationship to protect, and investors assumed the audit provided coverage. The risk accumulated in the gap between verification regimes until the fraud was revealed.
+
+Once residuals are explicit, they can also be priced, insured, escalated, or disclosed. The economic treatment of verification value, in which the value created by a procedure is the measurable difference between pre-verification and post-verification risk exposure, is developed briefly in Section~\ref{sec:implications} as an implication of the framework rather than as a core component.
+
+\section{Design Principles for Default-Free Audit Classification}
+\label{sec:principles}
+
+The following principles govern the architecture developed in the next section. They are stated as constraints that any default-free audit classification system must satisfy.
+
+\begin{enumerate}
+\item \textbf{No total classification without total domain coverage.} A system must not classify every input unless it has verified authority over every relevant input class.
+\item \textbf{Unverified is not accepted.} Failure to verify must return a distinct classification state, never an affirmative one.
+\item \textbf{Presumptive states cannot bind audit consequence.} A classification of likely acceptable may guide triage and workflow, but it cannot support an unqualified opinion or any equivalent binding conclusion.
+\item \textbf{Every residual must be owned, disclosed, or escalated.} No verification residual may remain unassigned without that fact itself being recorded and escalated.
+\item \textbf{The verifier must be independent of the generator.} The party or system proposing acceptance of a claim cannot be the sole authority admitting the claim.
+\item \textbf{The audit trail must record classification failure.} Missing evidence, weak evidence, jurisdictional obstruction, and unsupported management representation must leave durable traces that survive workflow completion.
+\end{enumerate}
+
+These principles are jointly violated by any system containing an implicit default in the sense of Definition~\ref{def:default}, and they are individually motivated by the failure modes documented in Section~\ref{sec:lit}: the first two by the audit evidence literature, the third by the runtime verification distinction between presumptive and definitive verdicts, the fourth by the orphaned-risk pattern, the fifth by the structural requirement that admission be separated from proposal, and the sixth by the observation that silent conversion thrives precisely where classification failure leaves no trace.
+
+\section{A Default-Free AIS Classification Architecture}
+\label{sec:architecture}
+
+Boundary Discipline can now be described as an accounting information systems architecture: an information pipeline in which classification is explicit, multi-valued, and admission-gated.
+
+\subsection{The Pipeline}
+\label{sec:pipeline}
+
+A claim enters the system as a \emph{claim packet}: the assertion itself together with its evidence packet, comprising the documents, confirmations, log extracts, or automated check results offered in its support, and the metadata needed for boundary evaluation, including assertion class, jurisdiction, materiality, and evidence grades. A \emph{boundary specification}, maintained as versioned machine-readable data, determines whether the attached evidence is admissible for that claim type: which verification methods produce valid evidence for which assertion classes, in which jurisdictions, at which materiality thresholds. The \emph{classification function} evaluates the claim packet against the boundary specification and returns exactly one of the states defined in Section~\ref{sec:multivalued}. An independent \emph{admission verifier}, distinct from whatever process generated or proposed the claim, determines whether the classification is admitted for audit consequence. All non-affirmative outcomes write entries to the Risk Assignment Register, and only admitted \textsf{Verified} claims may bind the audit conclusion.
+
+The architectural point, borrowed from fail-closed admission control in verified systems, is the strict separation of proposal from admission. Execution and proposal may be performed by any process, human or automated, including generative tools. Admission is performed only by the verifier, only against the declared boundary specification, and only into the declared classification states. A claim packet that fails admission is not rejected into silence; it is classified, registered, and escalated according to its state.
+
+\subsection{Multi-Valued Classification}
+\label{sec:multivalued}
+
+The theorem-level core of the framework, presented in Section~\ref{sec:formal}, requires only the binary distinction between \textsf{Verified} and \textsf{Undefined} for affirmative purposes. Operationally, however, audit workflow benefits from a richer verdict domain, and the runtime verification literature shows how to enrich it without corrupting it. The classification function returns exactly one of six states.
+
+\textsf{Verified}: the claim falls within a declared boundary and the required evidence grade is present. This is the only state that can support an unqualified audit conclusion.
+
+\textsf{Refuted}: admissible evidence establishes that the claim is false.
+
+\textsf{Undefined}: the claim falls outside all declared verification boundaries, or the required evidence grade is absent, and no admissible procedure can currently resolve it.
+
+\begin{remark}
+\label{rem:success}
+\textsf{Undefined} is a success state. A classifier that returns \textsf{Undefined} for an input outside its verified domain has computed the correct answer. The failure states of an audit classification system are not its \textsf{Undefined} outputs; they are its affirmative outputs on inputs it had no authority to classify.
+\end{remark}
+
+\textsf{Presumptively Verified}: available evidence favours the claim but does not meet the declared grade for the claim's materiality. This state may guide workflow prioritisation. It cannot bind audit consequence.
+
+\textsf{Presumptively Refuted}: available evidence disfavours the claim without admissibly establishing falsity. The same consequence restriction applies.
+
+\textsf{Escalation Required}: the claim exposes a defect in the boundary specification itself, such as an overlap of conflicting requirements, an orphaned residual, or a claim class for which no boundary was declared, and must be raised to the level at which specifications are governed.
+
+The presumptive states are the audit analogue of the refined inconclusive verdicts in RV-LTL: they encode operational lean without pretending to definitive resolution, and the consequence restriction is what prevents the enrichment from reintroducing silent conversion through the back door. A dashboard may sort its queue by presumptive state; an opinion may not rest on one.
+
+\subsection{Residual Registers and Durable Traces}
+\label{sec:registers}
+
+Every classification other than an admitted \textsf{Verified} generates a residual entry recording the claim, the state assigned, the boundary evaluation that produced it, and the risk assignment required by Principle~\ref{prin:ownership}. The register is append-only with respect to workflow: clearing a dashboard, closing a queue item, or completing an engagement phase does not delete or downgrade a residual entry. This single property, durability of the non-affirmative trace across workflow completion, is what distinguishes the architecture from a conventional exception system, and it is the direct structural answer to the absorption pattern documented in Section~\ref{sec:lit-ais}.
+
+\subsection{Composition}
+\label{sec:composition}
+
+Audits are made of many procedures, and an opinion depends on many assertions. The architecture is worthless unless correct local classifications compose into a correct conclusion, so the composition rule is stated explicitly.
+
+\begin{principle}[Composition]
+\label{prin:composition}
+An audit opinion is admissible as unqualified only if every material assertion on which it depends is an admitted \textsf{Verified} classification. An opinion inherits the weakest unresolved material assertion on which it depends.
+\end{principle}
+
+\begin{lstlisting}[numbers=none]
+if any material assertion in deps(Opinion) is Undefined and unresolved
+then Opinion is inadmissible as unqualified
+\end{lstlisting}
+
+The inheritance direction matters. Strength does not propagate upward from the majority of well-verified assertions; weakness propagates upward from the single unresolved one. This is not pessimism. It is the observation that an unqualified opinion asserts a conjunction, and a conjunction is no stronger than its weakest conjunct. A methodology that averages evidence quality across assertions, or that permits a preponderance of \textsf{Verified} classifications to carry an \textsf{Undefined} one across the admissibility line, has reintroduced the implicit default at the composition layer after eliminating it at the classification layer.
+
+\section{Formal Specification and Proof-of-Concept}
+\label{sec:formal}
+
+The methodology becomes enforceable only when its components are specified precisely enough to admit machine verification. The formalisation target is deliberately narrow and structural: the classification logic that maps evidence types, jurisdictions, materiality thresholds, and control relationships into audit classifications. This is the locus where implicit defaults typically enter. Substantive sampling strategy, statistical sufficiency, valuation modelling, fraud detection, and management intent are not formalised; they remain domains for professional judgement and substantive audit work. Boundary Discipline constrains how such work is allowed to propagate into audit conclusions by forbidding silent defaults when verification is structurally unavailable.
+
+\subsection{Boundary Specification Language}
+\label{sec:yaml}
+
+Verification boundaries are specified in a structured, versioned, machine-readable record supporting audit trails and automated validation. Table~\ref{tab:boundaryspec} gives an illustrative specification for the cash-existence assertion class underlying the Wirecard case discussed in Section~\ref{sec:wirecard}; the schema is illustrative and would require domain-specific validation by auditors, regulators, and AIS specialists before production use. Each row binds a verification method to the evidence quality it can establish, the jurisdictions in which it is recognised, the materiality threshold up to which it applies, and whether it is sufficient on its own to support an unqualified opinion.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{>{\raggedright\arraybackslash}p{2.6cm}>{\raggedright\arraybackslash}p{2.6cm}>{\raggedright\arraybackslash}p{1.6cm}>{\raggedright\arraybackslash}p{3.2cm}>{\raggedright\arraybackslash}p{2.6cm}}
+\toprule
+\textbf{Verification method} & \textbf{Evidence quality} & \textbf{Required for opinion} & \textbf{Applicable jurisdictions} & \textbf{Materiality threshold} \\
+\midrule
+Direct bank confirmation & Primary & Yes & Germany, United Kingdom, United States, Japan, Australia & Any amount \\
+\addlinespace
+Third-party trustee certification & Secondary & No (escalation required) & Singapore, Ireland & Below 5\% of total assets \\
+\addlinespace
+Management representation only & Tertiary & No (opinion modification required) & None declared & Non-material only \\
+\bottomrule
+\end{tabular}
+\caption{Illustrative verification boundary specification for the cash-existence assertion class. Material assets in a jurisdiction not listed against a boundary method that is required for opinion fall in an undefined region: no unqualified opinion may issue, and audit committee and board notification is required.}
+\label{tab:boundaryspec}
+\end{table}
+
+The specification makes explicit what current practice leaves implicit. When a material balance sits in trustee accounts in a jurisdiction that appears in no boundary's jurisdiction list for material amounts, the classification function cannot return \textsf{Verified}. This is not a failure of the system; it is the system working correctly by refusing to classify outside its verified domain, exactly as Remark~\ref{rem:success} requires. In practice such a specification would be maintained as versioned, machine-readable data (for example, as structured records analogous to the boundary tables an XBRL taxonomy already uses to constrain which tags and contexts are valid for a given filing), rather than as a static table; Table~\ref{tab:boundaryspec} presents its logical content rather than its storage format.
+
+\subsection{Preconditions and Postconditions of Verification Procedures}
+\label{sec:preconditions}
+
+The boundary specification becomes mechanical by giving every verification procedure a proof obligation of the same shape as a program statement: a precondition stating what must be true before the procedure is entitled to produce a verification result, and a postcondition stating exactly which classification the procedure is entitled to produce. The question to ask of every audit procedure is the weakest-precondition question: what must hold for this procedure's output to mean what it claims to mean?
+
+\begin{lstlisting}[numbers=none, caption={Precondition and postcondition of direct bank confirmation.}, label={lst:precond}]
+Procedure: Direct bank confirmation
+
+Preconditions:
+  bank exists as independent counterparty
+  confirmation route is controlled by the auditor
+  jurisdiction permits direct confirmation
+  account identifier is supplied
+  response is received through an authenticated channel
+
+Postcondition:
+  the cash-existence assertion may be classified Verified
+\end{lstlisting}
+
+If any precondition fails, the procedure cannot produce \textsf{Verified}. Not should not: cannot, within the declared system. A confirmation received through a route the auditor does not control, or from a jurisdiction that obstructs direct confirmation, does not weakly satisfy the precondition; it fails it, and the postcondition is unavailable. Silent conversion, in this vocabulary, is a postcondition violation: a procedure whose preconditions failed was nonetheless treated as having discharged its postcondition. An assertion for which no declared procedure's preconditions hold is classified \textsf{Undefined} by construction.
+
+\subsection{Formal Theorems}
+\label{sec:theorems}
+
+One theorem constitutes the formal centre of the framework. It is the joint formal statement of the Central Invariant (Principle~\ref{prin:invariant}) and the Composition principle (Principle~\ref{prin:composition}), and it is stated at the level of the opinion rather than the individual assertion, because the opinion is where consequence binds.
+
+\begin{theorem}[Default-Free Admissibility]
+\label{thm:main}
+For any audit opinion $O$, if $O$ is unqualified, then every material assertion on which $O$ depends is classified \textsf{Verified} under the declared boundary specification and admitted by an independent verifier.
+\end{theorem}
+
+\begin{corollary}[Contrapositive]
+\label{cor:contra}
+If any material assertion on which $O$ depends is \textsf{Undefined}, then $O$ is not admissible as an unqualified opinion.
+\end{corollary}
+
+Four supporting properties ground the theorem in the classification layer, stated in the vocabulary of Sections~\ref{sec:concepts} and~\ref{sec:architecture}.
+
+\begin{theorem}[Default-Freedom]
+\label{thm:default-freedom}
+No material assertion outside all declared verification boundaries may receive an affirmative classification. For any material assertion, the classification function returns either \textsf{Verified}, grounded in a declared boundary, or a non-affirmative state.
+\end{theorem}
+
+\begin{theorem}[Residual Preservation]
+\label{thm:residual}
+Every non-affirmative material classification generates a residual entry in the Risk Assignment Register, and no workflow operation deletes or downgrades a residual entry.
+\end{theorem}
+
+\begin{theorem}[Admission Separation]
+\label{thm:admission}
+A proposed classification cannot admit itself. Admission for audit consequence is performed only by a verifier independent of the process that generated or proposed the claim.
+\end{theorem}
+
+\begin{theorem}[Consequence Restriction]
+\label{thm:consequence}
+Only admitted \textsf{Verified} classifications may support an unmodified audit conclusion. Presumptive states may influence workflow but cannot bind consequence.
+\end{theorem}
+
+Two auxiliary properties address the specific boundary violations observed in practice. Jurisdictional exclusivity requires that no entity fall under multiple regulatory boundaries with conflicting verification requirements without explicit reconciliation, so that gaps between regulatory regimes are flagged rather than silently tolerated. Related-party transitivity requires that control relationships compose transitively, so that functional control exercised through intermediaries cannot be concealed by nominal ownership structures.
+
+\subsection{Formal Statement of the Admissibility Theorem}
+\label{sec:coq}
+
+Formalisation here is not directed at the audit itself. Its target is the classification rule that prevents an unverifiable material assertion from being admitted as verified, and the admissibility rule that prevents an unqualified opinion from depending on one. This restricted target, the logic mapping evidence types, jurisdictions, materiality thresholds, and control relationships into audit classifications, is precisely the locus where implicit defaults enter, and it is the only part of audit methodology for which formalisation is claimed here. Theorem~\ref{thm:main} can be restated in quantified logical form as follows, where $O$ ranges over audit opinions, $a$ ranges over assertions, $\mathrm{deps}(O)$ is the dependency set of $O$, and $\mathrm{state}(a)$ is the classification returned for $a$ by the boundary specification of Table~\ref{tab:boundaryspec} under the precondition checks of Section~\ref{sec:preconditions}:
+
+\begin{equation}
+\label{eq:mainform}
+\forall O.\ \mathrm{unqualified}(O) \;\Rightarrow\; \forall a \in \mathrm{deps}(O).\ \mathrm{material}(a) \;\Rightarrow\; \big(\mathrm{state}(a) = \textsf{Verified} \;\wedge\; \mathrm{admitted}(a)\big)
+\end{equation}
+
+The $\mathrm{state}$ function is not primitive: its value is computed mechanically from the declared boundary specification, so that verifiability is determined by declared boundaries and their application, not by discretion at the point of disappointment. The force of the statement lies in what it excludes. Given a fixed boundary specification and a fixed dependency set, there is no assignment of $\mathrm{state}$ and $\mathrm{admitted}$ satisfying Equation~\ref{eq:mainform} in which some material $a \in \mathrm{deps}(O)$ is $\textsf{Undefined}$ while $O$ is unqualified; the two are jointly inconsistent by construction. This restricted logic, evidence type, jurisdiction, materiality threshold, and control relationship mapped mechanically to a classification state, has been formalised and machine-checked in a companion Coq/Rocq development, quantified exactly as in Equation~\ref{eq:mainform} over abstract, unbounded assertion and opinion types rather than restricted to the illustrative cases of Sections~\ref{sec:wirecard} and~\ref{sec:ca-case}; \texttt{coqchk} confirms the development is closed under the global context with no \texttt{Admitted} and no \texttt{Axiom}. The proof is a direct consequence of the definition of admissibility as the per-dependency check itself, rather than an induction over the dependency set: there is no route to admissibility in the development that bypasses checking every material dependency, which is what it means for the exclusion described above to hold by construction rather than merely by convention. The same development proves Residual Preservation (Theorem~\ref{thm:residual}) and Admission Separation (Theorem~\ref{thm:admission}) in the same general form, and extracts to an executable OCaml classification component; the extraction step itself, like any Coq extraction, is trusted rather than independently machine-checked. See the companion repository, \emph{[repository URL to be inserted before submission]}, and its \texttt{NON\_CLAIMS.md} for the exact boundary of what this formal development does and does not establish.
+
+\section{Illustrative Case: Wirecard and Material Cash Verification}
+\label{sec:wirecard}
+
+The Wirecard collapse can now be read through the framework. Three boundary violations were operative. The jurisdictional boundary did not extend to the Philippines, where the purported \officialeuro 1.9 billion was held, yet the audit proceeded as if it did. The evidence quality boundary between primary bank confirmation and tertiary documentation, such as screenshots and intermediary-provided statements, was never formally enforced against the materiality involved. The control boundary between independent third-party processors and functionally controlled entities was never formally defined, permitting opportunistic classification of Asian partners that derived their entire revenue from Wirecard.
+
+Under Boundary Discipline, the material cash-existence assertion is admissible only if primary confirmation is available within the applicable jurisdiction list of the boundary specification. When that confirmation is unavailable, the preconditions of Section~\ref{sec:preconditions} fail, Theorem~\ref{thm:default-freedom} forces the classifier into a non-affirmative state, and Corollary~\ref{cor:contra} makes an unqualified opinion formally inadmissible given that state. The claim being made here is deliberately narrow. Boundary Discipline would not have prevented the fraud, and it would not have compelled any particular exercise of professional judgement. What it would have changed is the classification state of the Philippine trustee-account assertion: the evidential obstruction would have been visible as \textsf{Undefined}, as a registered residual, or as a scope limitation, rather than passing as ordinary acceptance. In that classification-theoretic sense, Wirecard is a counterexample demonstrating that the legacy decision procedure was not default-free.
+
+The Verification Balance Sheet for the bank balance assertion makes the accounting explicit. The Fiat Ground comprises the bank confirmation channel and the assumption of jurisdictional cooperation. The Verified Target is the existence of specific cash balances at named institutions, and nothing more. The Procedure Cost comprises direct confirmation, legal coordination across jurisdictions, and audit delay. The Residuals comprise trustee independence, the authenticity of the confirmation route, and jurisdictional enforceability. The Trust Chain runs from auditor to bank to regulator to the public audit opinion. Every element of the fraud exploited a line of this balance sheet: the confirmation route was corrupted, the trustee was not independent, the jurisdiction was not cooperative, and the residuals were owned by no one. A methodology that had required this balance sheet, and had required each residual to appear in a Risk Assignment Register with an identified owner, would have recorded the evidential obstruction as a first-class classification outcome rather than allowing it to disappear into workflow.
+
+\section{AIS Use Case: Silent Conversion in Continuous Auditing}
+\label{sec:ca-case}
+
+The same structure appears at ordinary scale in continuous auditing. Consider a monitoring system whose configured rules flag transactions for investigation, and whose exception volume exceeds investigative capacity, so that a prioritisation scheme determines which flags are pursued. A worked example makes the mechanism concrete. Suppose the system flags 10{,}000 transactions in a reporting period and a thresholding layer routes 200 of them to human review. The remaining 9{,}800 are not verified; they are merely deprioritised. If the dashboard reports that 200 exceptions were reviewed with no material issue found, while the 9{,}800 disappear from consequence, the system has silently converted unreviewed exceptions into accepted background. Exceptions that are deprioritised for practical reasons remain epistemically unverified. Yet because operations continue and the dashboard is cleared, the system, and the organisation reading it, treats the underlying assertions as accepted by default. The dashboard is cleared, but the assertions have not been verified. Silent conversion here occurs not through human judgement on any single item but through thresholding, alert fatigue, and the mechanics of the exception queue.
+
+The mechanism can be written as a three-line algorithm. The undisciplined system runs:
+
+\begin{lstlisting}[numbers=none]
+for each exception e:
+    if priority(e) < threshold:
+        clear(e)
+\end{lstlisting}
+
+The disciplined system runs:
+
+\begin{lstlisting}[numbers=none]
+for each exception e:
+    if priority(e) < threshold:
+        state(e) := Unreviewed
+        residual_register.add(e)
+\end{lstlisting}
+
+with the governing inequality:
+
+\begin{lstlisting}[numbers=none]
+Unreviewed != Accepted
+\end{lstlisting}
+
+That single line is the continuous auditing case in full. Prioritisation is legitimate, capacity is finite, and triage is not the error. The error is the disappearance of the deprioritised exceptions from the record of what remains unestablished.
+
+The Verification Balance Sheet for a continuous auditing exception reads as follows. The Fiat Ground comprises the transaction logs and the rule configuration. The Verified Target is whether a specific transaction violates a defined control, and nothing more. The Procedure Cost comprises the automated flag plus human investigation. The Residuals comprise deprioritised exceptions, threshold tuning, and false negatives. The Trust Chain runs from the AIS monitor to the audit dashboard to management assurance.
+
+Under Boundary Discipline, a deprioritised exception is classified \textsf{Presumptively Verified} at best, more honestly \textsf{Undefined}, and in either case it generates a durable residual entry that survives the clearing of the dashboard. The aggregate of such entries, visible in the Risk Assignment Register, is itself audit evidence about the assurance the monitoring system actually provides, as distinct from the assurance its cleared dashboard appears to provide. The data layer already knows how to do this, as Section~\ref{sec:lit-sql} observed; the discipline consists in refusing to let any layer between the flag and the opinion collapse the state.
+
+\section{Implications for Standards, Audit Reports, and Inspection}
+\label{sec:implications}
+
+Boundary Discipline could inform a future auditing standard, an inspection protocol, or an internal firm methodology; the framework does not depend on any one of these adoption paths. Three implications are worth stating.
+
+First, audit reporting. A report produced under the framework can disclose not only what was verified but what was not, and who bears the risk of error in unverified domains. Material \textsf{Undefined} regions become visible to investors and lenders, who can price the disclosed uncertainty. Fraud may still occur, but the evidential obstruction would be recorded as a material classification state rather than absorbed into an unqualified conclusion, and an auditor who issues an unqualified opinion despite material \textsf{Undefined} classifications has violated a formally specified constraint rather than merely exercised poor judgement. Digital reporting formats offer a natural carrier for this disclosure. An XBRL filing already tags individual facts against a governing taxonomy and rejects tags outside it; a boundary specification of the kind proposed here could extend that same validation logic upward, so that a fact tagged as audited carries, in machine-readable form, the boundary classification and residual status underlying it, rather than presenting a uniform assurance level to every consumer of the filing. The distinction between primary and secondary audit objects in XBRL assurance sharpens this point: the primary object is the instance document's tagged facts, while the taxonomy, presentation linkbase, and calculation linkbase against which those facts are validated are secondary objects that preparers can extend. A custom taxonomy extension that is not anchored to a governing standard concept, of the kind permitted under frameworks such as the European Single Electronic Format, is a boundary violation in exactly the sense defined here: automated validation confirms that the filing is well-formed against a taxonomy the preparer itself authored, which is a syntactic check, not verification that the extension's meaning is correct. Under Boundary Discipline, an unanchored or insufficiently justified extension falls outside the verified domain by construction and must surface as \textsf{Undefined} or an escalation, rather than passing silently because the file parses.
+
+Second, inspection and quality control. Because boundary specifications and classification logs are machine-readable, inspection can evaluate objective indicators rather than declared policy. Three natural indicators are the boundary coverage ratio, meaning the fraction of material assertions falling within declared boundaries capable of producing determinate outputs; undefined region materiality, meaning the percentage of reported assets or revenues falling in regions where the correct classification is \textsf{Undefined} under the published specification; and the residual assignment rate, meaning the fraction of residuals with an identified owner of declared capacity. These indicators make it inspectable whether a firm actually eliminated implicit defaults rather than merely declaring that it did. Illustrative requirements in the style of a boundary verification standard are collected in Appendix~\ref{app:requirements}.
+
+Third, verification economics. Once residuals are explicit, they can be priced, insured, escalated, or disclosed. The value created by a verification procedure is the measurable difference between pre-verification and post-verification risk exposure, and explicit residual registers make that difference estimable in ways that opaque assurance does not. A fuller development of verification pricing is left to future work.
+
+\section{Limitations and Future Work}
+\label{sec:limitations}
+
+The formal core covers classification logic, not audit substance. Boundary Discipline does not eliminate professional judgement, and it does not detect fraud; auditors still decide where boundaries are drawn, what evidence grades to assign, and what materiality thresholds to apply. The framework makes those decisions explicit, versioned, and inspectable, and it forbids their silent circumvention, which is a narrower and more defensible claim. The boundary specification of Table~\ref{tab:boundaryspec} is a proof-of-concept artefact requiring domain-specific validation before production use. The admissibility, residual-preservation, and admission-separation theorems are already machine-checked, generally, in the companion Coq/Rocq development described in Section~\ref{sec:coq}; what remains open is not their mechanisation but their application to a validated, production-grade boundary specification, and the substantive judgement, sampling sufficiency, valuation, and fraud detection, that the framework deliberately leaves outside its scope. The empirical questions, including whether default-free classification measurably changes deficiency rates, restatement frequency, or the informativeness of audit reports, remain open and are natural targets for archival and field study.
+
+Some audit settings also show that documentary evidence can be proactively manufactured, so the boundary problem is not only missing evidence but misplaced authority in the evidence hierarchy; a fuller treatment belongs to a critical accounting venue. Finally, AI-assisted audit systems make the problem addressed here more urgent rather than different in kind. Generated conclusions should be treated as proposed classifications requiring independent admission, never as verified outputs, and the admission-separation property of Theorem~\ref{thm:admission} was designed with exactly this extension in view. Its development is reserved for separate work.
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+Audit information systems should not collapse verification failure into acceptance. Boundary Discipline supplies a methodology for preserving unresolved classifications, assigning residuals to identified owners, separating admission from proposal, and making the admissibility of audit conclusions inspectable. It does not eliminate professional judgement, audit risk, or fraud; its claim is narrower and harder to dismiss. An audit information system must preserve the epistemic state of verification failure, and it must not allow missing, obstructed, ambiguous, or inconclusive evidence to pass as acceptance merely because the workflow needs a binary output. The invariant is enforced at every layer: the state space contains \textsf{Undefined}, the boundary specification computes it through failed preconditions, the residual register preserves it, the composition rule propagates it, and the admissibility theorem excludes any unqualified conclusion that depends on it. The technical resources for this discipline already exist in audit theory, in accounting information systems, in database semantics, and in runtime verification. The contribution of this paper is the architecture that joins them.
+
+% --------------------------------------------------------------------
+% Reference list formatted per IJDAR's Reference Style page (APA 7th
+% edition; https://www.ijdar.org/reference-style), arranged alphabetically.
+% DOIs below were resolved against publisher and Crossref-indexed records.
+% Three entries (esma2020, isa705, vasarhelyi1991) carry no DOI because
+% none has been assigned by the publisher; verify this remains current
+% before submission rather than inserting a placeholder or guessed DOI.
+% --------------------------------------------------------------------
+\begin{thebibliography}{99}
+
+\bibitem[Alles et al.(2006)]{alles2006}
+Alles, M.~G., Brennan, G., Kogan, A., \& Vasarhelyi, M.~A. (2006).
+Continuous monitoring of business process controls: A pilot implementation of a continuous auditing system at Siemens.
+\emph{International Journal of Accounting Information Systems}, 7(2), 137--161. \url{https://doi.org/10.1016/j.accinf.2005.10.004}
+
+\bibitem[Austin et al.(2021)]{austin2021}
+Austin, A.~A., Carpenter, T.~D., Christ, M.~H., \& Nielson, C.~S. (2021).
+The data analytics journey: Interactions among auditors, managers, regulation, and technology.
+\emph{Contemporary Accounting Research}, 38(3), 1888--1924. \url{https://doi.org/10.1111/1911-3846.12680}
+
+\bibitem[Bauer et al.(2010)]{bauer2010}
+Bauer, A., Leucker, M., \& Schallhart, C. (2010).
+Comparing LTL semantics for runtime verification.
+\emph{Journal of Logic and Computation}, 20(3), 651--674. \url{https://doi.org/10.1093/logcom/exn075}
+
+\bibitem[Bauer et al.(2011)]{bauer2011}
+Bauer, A., Leucker, M., \& Schallhart, C. (2011).
+Runtime verification for LTL and TLTL.
+\emph{ACM Transactions on Software Engineering and Methodology}, 20(4), Article 14. \url{https://doi.org/10.1145/2000799.2000800}
+
+\bibitem[Beerbaum(2020)]{beerbaum2020}
+Beerbaum, D. (2020).
+The future of audit after the Wirecard accounting scandal: Consideration of the `Wambach report' (Working paper).
+\emph{Aalto University School of Business, Department of Accounting}. \url{https://doi.org/10.2139/ssrn.4164941}
+
+\bibitem[CPA Canada(2016)]{cas705}
+Chartered Professional Accountants of Canada. (2016).
+\emph{CAS 705: Modifications to the opinion in the independent auditor's report}. CPA Canada Handbook -- Assurance.
+
+\bibitem[Codd(1979)]{codd1979}
+Codd, E.~F. (1979).
+Extending the database relational model to capture more meaning.
+\emph{ACM Transactions on Database Systems}, 4(4), 397--434. \url{https://doi.org/10.1145/320107.320109}
+
+\bibitem[ESMA(2020)]{esma2020}
+European Securities and Markets Authority. (2020).
+\emph{Fast track peer review on the application of the guidelines on the enforcement of financial information by BaFin and FREP in the context of Wirecard} (Report No. ESMA42-111-5349). No DOI assigned.
+
+\bibitem[Habib(2013)]{habib2013}
+Habib, A. (2013).
+A meta-analysis of the determinants of modified audit opinion decisions.
+\emph{Managerial Auditing Journal}, 28(3), 184--216. \url{https://doi.org/10.1108/02686901311304349}
+
+\bibitem[Hurtt(2010)]{hurtt2010}
+Hurtt, R.~K. (2010).
+Development of a scale to measure professional skepticism.
+\emph{Auditing: A Journal of Practice \& Theory}, 29(1), 149--171. \url{https://doi.org/10.2308/aud.2010.29.1.149}
+
+\bibitem[IAASB(2016)]{isa705}
+International Auditing and Assurance Standards Board. (2016).
+\emph{International Standard on Auditing 705 (Revised): Modifications to the opinion in the independent auditor's report}. IFAC. No DOI assigned.
+
+\bibitem[Issa and Kogan(2014)]{issa2016}
+Issa, H., \& Kogan, A. (2014).
+A predictive ordered logistic regression model as a tool for quality review of control risk assessments.
+\emph{Journal of Information Systems}, 28(2), 209--229. \url{https://doi.org/10.2308/isys-50808}
+
+\bibitem[Knechel et al.(2013)]{knechel2013}
+Knechel, W.~R., Krishnan, G.~V., Pevzner, M., Shefchik, L.~B., \& Velury, U.~K. (2013).
+Audit quality: Insights from the academic literature.
+\emph{Auditing: A Journal of Practice \& Theory}, 32(Supplement 1), 385--421. \url{https://doi.org/10.2308/ajpt-50350}
+
+\bibitem[Kogan et al.(1999)]{kogan1999}
+Kogan, A., Sudit, E.~F., \& Vasarhelyi, M.~A. (1999).
+Continuous online auditing: A program of research.
+\emph{Journal of Information Systems}, 13(2), 87--103. \url{https://doi.org/10.2308/jis.1999.13.2.87}
+
+\bibitem[Leucker and Schallhart(2009)]{leucker2009}
+Leucker, M., \& Schallhart, C. (2009).
+A brief account of runtime verification.
+\emph{The Journal of Logic and Algebraic Programming}, 78(5), 293--303. \url{https://doi.org/10.1016/j.jlap.2008.08.004}
+
+\bibitem[Mautz and Sharaf(1961)]{mautz1961}
+Mautz, R.~K., \& Sharaf, H.~A. (1961).
+\emph{The philosophy of auditing}. American Accounting Association.
+
+\bibitem[McCrum(2022)]{mccrum2022}
+McCrum, D. (2022).
+\emph{Money men: A hot startup, a billion dollar fraud, a fight for the truth}. Bantam Press.
+
+\bibitem[Nelson(2009)]{nelson2009}
+Nelson, M.~W. (2009).
+A model and literature review of professional skepticism in auditing.
+\emph{Auditing: A Journal of Practice \& Theory}, 28(2), 1--34. \url{https://doi.org/10.2308/aud.2009.28.2.1}
+
+\bibitem[PCAOB(2017)]{pcaob3105}
+Public Company Accounting Oversight Board. (2017).
+\emph{AS 3105: Departures from unqualified opinions and other reporting circumstances} (PCAOB Release No. 2017-001).
+
+\bibitem[Vasarhelyi and Halper(1991)]{vasarhelyi1991}
+Vasarhelyi, M.~A., \& Halper, F.~B. (1991).
+The continuous audit of online systems.
+\emph{Auditing: A Journal of Practice \& Theory}, 10(1), 110--125. No DOI assigned.
+
+\end{thebibliography}
+
+\appendix
+
+\section{Glossary of Terms}
+\label{app:glossary}
+
+\noindent\textbf{Admission.} The act by which an independent verifier accepts a proposed classification as binding for audit consequence.
+
+\medskip
+\noindent\textbf{Boundary.} The demarcation between regions where a verification procedure produces valid results and regions where it does not.
+
+\medskip
+\noindent\textbf{Fiat Ground.} The foundational assumptions a verification system takes as given, which cannot themselves be verified within the system.
+
+\medskip
+\noindent\textbf{Implicit default.} A classification rule that applies when explicit procedures fail, typically producing affirmative outputs without documentation.
+
+\medskip
+\noindent\textbf{Residual.} What remains unverified after a verification procedure completes, including both known limitations and structural blind spots.
+
+\medskip
+\noindent\textbf{Risk assignment.} The process of identifying who bears responsibility for losses if a verification residual materialises as actual error.
+
+\medskip
+\noindent\textbf{Silent conversion.} The operational treatment of a verification failure as acceptance without an explicit \textsf{Undefined}, modified, blocked, or escalated classification.
+
+\medskip
+\noindent\textbf{Trust Chain.} The sequence of delegations connecting a verification procedure's output to its fiat ground.
+
+\medskip
+\noindent\textbf{Undefined.} The classification result when an input falls outside all defined verification boundaries.
+
+\medskip
+\noindent\textbf{Verification failure.} The condition in which a system cannot determine whether a claim is verified or refuted within the evidence, authority, and observation boundaries available to it.
+
+\section{Illustrative Boundary Verification Requirements}
+\label{app:requirements}
+
+The following requirements illustrate how Boundary Discipline could be codified in an auditing standard, an inspection protocol, or an internal firm methodology. They are illustrative rather than proposed regulatory text.
+
+\begin{enumerate}
+\item Auditors must define explicit verification boundaries for all material assertion classes, specifying applicable methods, jurisdictions, evidence grades, and materiality thresholds, documented in a machine-readable format subject to version control and audit trail requirements.
+\item Audit methodology must produce \textsf{Undefined} rather than affirmative classifications for assertions outside defined boundaries. Management representations cannot substitute for primary evidence above materiality thresholds, scope limitations affecting material items preclude unqualified opinions, and documentation from unverified intermediaries cannot establish asset existence.
+\item For engagements above a size threshold reflecting systemic importance and fee capacity, the classification logic mapping evidence to conclusions must be specified in a formal language amenable to machine verification, proven free of implicit defaults using a proof assistant, and extracted to executable code used in actual audit procedures.
+\item Audit reports must include a Risk Assignment Register identifying each verification residual, its assigned owner, and any orphaned residuals for which no owner could be identified.
+\item Inspections and internal quality-control reviews must evaluate the boundary coverage ratio, undefined region materiality, and residual assignment rate derived from the boundary specifications and classification logs.
+\end{enumerate}
+
+Requirements of type (1) through (4) are compliance requirements that firms must satisfy; requirement (5) comprises inspectable indicators that make compliance measurable. The distinction prevents paper compliance, meaning a boundary regime declared in policy but not enforced in the operative classification procedure.
+
+\end{document}

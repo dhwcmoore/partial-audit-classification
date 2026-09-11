@@ -8,19 +8,19 @@ Require Import PAC.Boundary.
 Require Import PAC.Admissibility.
 Require Import PAC.Residual.
 
-(** Cases.v — the three worked examples from Section 6 (STTT) / Sections
+(** Cases.v — the three worked examples from Section 7 (STTT) / Sections
     7-8 (AIS): Wirecard as a classification trace, continuous auditing
-    exception queues, and the SQL Unknown collapse. These are the
-    "finite instances exercised" referred to in the STTT paper's Remark
-    on "machine-checked sketch": concrete instantiations of the generic
-    development in Admissibility.v and Residual.v, not a claim that
-    every possible boundary specification or workflow has been
-    enumerated. See NON_CLAIMS.md. *)
+    exception queues, and the SQL Unknown collapse. These exercise the
+    general theorems in Admissibility.v and Residual.v on finite
+    instances; they are illustrations of theorems proved generally, not
+    the extent of what is proved and not a claim that every possible
+    boundary specification or workflow has been enumerated. See
+    NON_CLAIMS.md. *)
 
 Module Wirecard.
 
   (** The five preconditions of "direct bank confirmation" (Section 4's
-      running example / the Wirecard trace of Section 6.1 and Section
+      running example / the Wirecard trace of Section 7.1 and Section
       7 of the AIS paper). *)
   Inductive WFact :=
     | BankExistsIndependent
@@ -50,7 +50,7 @@ Module Wirecard.
 
   Definition boundary : BoundarySpec WFact WAssertion := [direct_bank_confirmation].
 
-  (** Observed evidence per Section 6.1: an independent bank exists and
+  (** Observed evidence per Section 7.1: an independent bank exists and
       an account identifier was supplied, but the confirmation route was
       not controlled by the auditor, the jurisdiction did not permit
       direct confirmation, and no authenticated channel was used. Three
@@ -96,9 +96,10 @@ End Wirecard.
 Module ContinuousAuditing.
 
   (** Ten transactions stand in for the paper's 10,000-transaction
-      example (Section 6.2 / Section 8); the 2-reviewed-of-10
-      proportion mirrors the paper's 200-of-10,000 ratio at a size Coq
-      can evaluate directly by [reflexivity]. *)
+      example (Section 7.2 / Section 8), at a size Coq can evaluate
+      directly by [reflexivity]. The 2-of-10 reviewed proportion is
+      chosen for a clean [reflexivity] count, not to reproduce the
+      paper's 200-of-10,000 (2%) reviewed rate. *)
   Inductive CAAssertion := Txn (n : nat).
 
   Inductive CAFact := ReviewedByAnalyst (n : nat).
@@ -117,7 +118,7 @@ Module ContinuousAuditing.
   Definition boundary : BoundarySpec CAFact CAAssertion := map proc_for (seq 0 10).
 
   (** Transactions 0 and 1 were reviewed; 2 through 9 were deprioritised
-      by the thresholding layer, exactly as in Section 6.2's
+      by the thresholding layer, exactly as in Section 7.2's
       three-line algorithm. *)
   Definition observed_evidence : list CAFact := [ReviewedByAnalyst 0; ReviewedByAnalyst 1].
 
@@ -130,7 +131,7 @@ Module ContinuousAuditing.
   Example txn5_undefined : boundary_state cafeq observed_evidence (Txn 5) boundary = Undefined.
   Proof. reflexivity. Qed.
 
-  (** The disciplined algorithm of Section 6.2: every non-Verified
+  (** The disciplined algorithm of Section 7.2: every non-Verified
       transaction writes a residual entry. This is
       [state(e) := Unreviewed; residual_register.add(e)] made concrete;
       the governing inequality "Unreviewed != Accepted" is
@@ -173,8 +174,8 @@ End ContinuousAuditing.
 
 Module SqlUnknown.
 
-  (** A minimal model of the reporting-layer collapse from Section 6.3
-      (STTT) / Section 5.3 of the AIS paper: a risk score that is either
+  (** A minimal model of the reporting-layer collapse from Section 7.3
+      (STTT) / Section 2.3 of the AIS paper: a risk score that is either
       a concrete value or Unknown, and two candidate ways of rendering
       it downstream. This is deliberately not a model of SQL's
       three-valued logic itself (Codd 1979 already supplies that at the

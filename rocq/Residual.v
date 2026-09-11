@@ -6,8 +6,8 @@ Require Import PAC.Base.
 (** Residual.v — the residual register and Theorem 2 (Residual
     Preservation): "Every non-affirmative classification of a material
     assertion writes an entry to the residual register, and no workflow
-    operation deletes or downgrades an entry" (STTT Theorem 4.2 /
-    AIS Theorem 6.3).
+    operation deletes or downgrades an entry" (STTT Theorem 2, Section 8
+    "Formal Sketch" / AIS Theorem 6.3).
 
     The register is modelled as a list, and [step] is its only
     permitted transition: strictly additive. There is deliberately no

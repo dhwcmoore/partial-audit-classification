@@ -5,7 +5,7 @@ Require Import Coq.Bool.Bool.
 Require Import PAC.Base.
 
 (** Boundary.v — verification boundaries and preconditions (Section 4 of
-    the STTT paper; Section 5.1-5.2 of the AIS paper). A [Procedure] is
+    the STTT paper; Section 6.1-6.2 of the AIS paper). A [Procedure] is
     a verification method with an explicit precondition list and an
     assertion class it covers. A [BoundarySpec] is a declared list of
     such procedures. [boundary_state] computes the mechanical
@@ -57,7 +57,7 @@ Fixpoint procedure_satisfied {Fact Assertion : Type}
   end.
 
 (** The only two outcomes a boundary specification can mechanically
-    produce. This is Section 5's "an assertion for which no declared
+    produce. This is Section 4's "an assertion for which no declared
     procedure's preconditions hold is classified Undefined by
     construction," made literal: there is no third branch here for the
     function to take. *)
