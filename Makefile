@@ -7,7 +7,10 @@
 all: rocq ocaml
 
 # The formal development, including extraction to rocq/audit_kernel.ml.
+# rocq/Makefile is a generated build artifact (see .gitignore) and is not
+# tracked in git, so it is (re)generated here before every build.
 rocq:
+	cd rocq && coq_makefile -f _CoqProject -o Makefile
 	$(MAKE) -C rocq
 
 # The OCaml CLI. Copies the freshly extracted kernel into ocaml/ so the
@@ -34,5 +37,5 @@ verify: all check
 	@echo "ALL GATES PASSED"
 
 clean:
-	$(MAKE) -C rocq clean
-	rm -rf _build ocaml/audit_kernel.ml ocaml/audit_kernel.mli
+	-$(MAKE) -C rocq clean
+	rm -rf _build ocaml/audit_kernel.ml ocaml/audit_kernel.mli rocq/Makefile rocq/Makefile.conf rocq/.Makefile.d
