@@ -4,5 +4,6 @@ Boundary.v
 Admissibility.v
 Residual.v
 SelfAdmission.v
+Pipeline.v
 Cases.v
 Extraction.v

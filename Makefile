@@ -22,7 +22,7 @@ ocaml: rocq
 # Independent re-verification of every .vo with coqchk: no Admitted, no
 # Axiom, every module closed under the global context.
 coqchk: rocq
-	cd rocq && coqchk -R . PAC PAC.Base PAC.Boundary PAC.Admissibility PAC.Residual PAC.SelfAdmission PAC.Cases PAC.Extraction
+	cd rocq && coqchk -R . PAC PAC.Base PAC.Boundary PAC.Admissibility PAC.Residual PAC.SelfAdmission PAC.Pipeline PAC.Cases PAC.Extraction
 
 check: coqchk
 	python3 tools/fixture_check.py
