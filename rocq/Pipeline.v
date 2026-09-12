@@ -36,8 +36,27 @@ Require Import PAC.Residual.
     and the evidence context to classify against (with the context's
     own stable identity, for the residual entries this run may emit),
     which assertions are in scope and which of those are material, a
-    proposal and an optional admission certificate per assertion, and
-    the process registry admission is checked against. *)
+    proposal identity and proposer per assertion, an optional admission
+    certificate per assertion, and the process registry admission is
+    checked against.
+
+    v0.2 review finding: an earlier version of this record let the
+    caller supply a complete [ClassificationProposal] per assertion
+    ([pi_proposal : Assertion -> ClassificationProposal Assertion]).
+    Nothing checked that a returned proposal's own
+    [proposal_assertion]/[proposal_classification] fields matched the
+    assertion [build_packet] was actually classifying, or the
+    [dep_state] [classify] had just computed for it. A certificate
+    validly admitting a *different* proposal -- for a different
+    assertion, or claiming a different classification -- could
+    therefore validate a packet it had nothing to do with, as long as
+    [classify] separately happened to return [Verified] for the real
+    assertion. [pi_proposal] is replaced below by [pi_proposal_id] and
+    [pi_proposer]: [build_packet] constructs the [ClassificationProposal]
+    itself, from the real assertion and the real, freshly computed
+    classification, so a mismatched proposal is not a validation
+    failure to be checked for -- it is not a value [build_packet] can
+    construct in the first place. *)
 Record PipelineInput (Fact Assertion : Type) := mkPipelineInput {
   pi_bspec       : BoundarySpec Fact Assertion;
   pi_eq          : EqbSpec Fact;
@@ -45,31 +64,44 @@ Record PipelineInput (Fact Assertion : Type) := mkPipelineInput {
   pi_context_id  : ContextId;
   pi_assertions  : list Assertion;
   pi_material    : Assertion -> bool;
-  pi_proposal    : Assertion -> ClassificationProposal Assertion;
+  pi_proposal_id : Assertion -> ProposalId;
+  pi_proposer    : Assertion -> ProcessId;
   pi_certificate : Assertion -> option AdmissionCertificate;
   pi_registry    : ProcessRegistry
 }.
-Arguments mkPipelineInput {Fact Assertion} _ _ _ _ _ _ _ _ _.
+Arguments mkPipelineInput {Fact Assertion} _ _ _ _ _ _ _ _ _ _.
 Arguments pi_bspec {Fact Assertion} _.
 Arguments pi_eq {Fact Assertion} _.
 Arguments pi_context {Fact Assertion} _.
 Arguments pi_context_id {Fact Assertion} _.
 Arguments pi_assertions {Fact Assertion} _.
 Arguments pi_material {Fact Assertion} _.
-Arguments pi_proposal {Fact Assertion} _.
+Arguments pi_proposal_id {Fact Assertion} _.
+Arguments pi_proposer {Fact Assertion} _.
 Arguments pi_certificate {Fact Assertion} _.
 Arguments pi_registry {Fact Assertion} _.
 
 (** Stage 1-2: classify this assertion against the declared boundary,
-    then package it with its proposal and certificate as a dependency
+    then construct its proposal from that same assertion and that same
+    computed classification, and package the result as a dependency
     packet. This is where [classify]'s output actually becomes the
-    [dep_state] that every later stage reasons about; nothing later in
-    the pipeline computes a classification independently. *)
+    [dep_state] every later stage reasons about, and also becomes
+    [proposal_classification] on the proposal built for it: the two
+    cannot diverge, because both are read from the one local [s]
+    below rather than supplied independently. *)
 Definition build_packet {Fact Assertion : Type}
     (inp : PipelineInput Fact Assertion) (a : Assertion) : DependencyPacket Assertion :=
-  mkDependencyPacket a (pi_material inp a)
-    (classify (pi_bspec inp) (pi_eq inp) (pi_context inp) a)
-    (pi_proposal inp a) (pi_certificate inp a).
+  let s := classify (pi_bspec inp) (pi_eq inp) (pi_context inp) a in
+  let p := mkClassificationProposal (pi_proposal_id inp a) a s (pi_proposer inp a) in
+  mkDependencyPacket a (pi_material inp a) s p (pi_certificate inp a).
+
+Lemma build_packet_proposal_matches :
+  forall {Fact Assertion : Type} (inp : PipelineInput Fact Assertion) (a : Assertion),
+    proposal_assertion (dep_proposal (build_packet inp a)) = a /\
+    proposal_classification (dep_proposal (build_packet inp a)) = dep_state (build_packet inp a).
+Proof.
+  intros Fact Assertion inp a. unfold build_packet. simpl. split; reflexivity.
+Qed.
 
 Record AuditDecision (Assertion : Type) := mkAuditDecision {
   decision_classifications : list EvidenceState;
@@ -120,10 +152,15 @@ Proof.
   split; [simpl in Hs; exact Hs | exact Hv].
 Qed.
 
-(** Every material assertion the pipeline emits a residual for is one
-    [pipeline_unqualified_sound] would have blocked: emission and the
-    opinion decision agree on which assertions are the problem. *)
-Theorem pipeline_residual_implies_not_unqualified_witness :
+(** A material assertion that is not [dep_ok] blocks [Unqualified] --
+    a direct instance of [decide_opinion_blocked] over the packet
+    [run_pipeline] itself builds. This is a weaker statement than its
+    v0.2-review-era name suggested (that name promised a residual-log
+    relationship this theorem's statement never mentioned), so it is
+    named for exactly what it proves; see
+    [pipeline_failed_material_dependency_emits_residual] below for the
+    residual-membership statement the earlier name was reaching for. *)
+Theorem pipeline_failed_material_dependency_blocks_unqualified :
   forall {Fact Assertion : Type} (inp : PipelineInput Fact Assertion)
     (start_id : ResidualId) (log : RegisterLog Assertion) (a : Assertion),
     In a (pi_assertions inp) -> pi_material inp a = true ->
@@ -136,4 +173,33 @@ Proof.
   - apply in_map. exact Hin.
   - simpl. exact Hmat.
   - exact Hnok.
+Qed.
+
+(** The stronger, residual-aware statement: a material assertion that
+    is not [dep_ok] not only blocks [Unqualified]
+    (above) but has a matching entry demonstrably present in
+    [decision_residuals], with the same assertion and the same
+    classification -- not merely that emission and blocking cannot
+    disagree in principle, but that this specific run's output log
+    actually contains the entry. Built from
+    [classify_and_register_emits_for_dependency] (Residual.v) applied
+    to the packet [build_packet] constructs for [a], rather than
+    proved independently. *)
+Theorem pipeline_failed_material_dependency_emits_residual :
+  forall {Fact Assertion : Type} (inp : PipelineInput Fact Assertion)
+    (start_id : ResidualId) (log : RegisterLog Assertion) (a : Assertion),
+    In a (pi_assertions inp) -> pi_material inp a = true ->
+    dep_ok (pi_registry inp) (build_packet inp a) = false ->
+    exists e, residual_assertion e = a /\
+              residual_state e = classify (pi_bspec inp) (pi_eq inp) (pi_context inp) a /\
+              In e (decision_residuals (run_pipeline inp start_id log)).
+Proof.
+  intros Fact Assertion inp start_id log a Hin Hmat Hnok.
+  unfold run_pipeline, decision_residuals; simpl.
+  destruct (classify_and_register_emits_for_dependency (pi_registry inp)
+              (boundary_id (pi_bspec inp)) (boundary_version (pi_bspec inp)) (pi_context_id inp)
+              start_id (map (build_packet inp) (pi_assertions inp)) (build_packet inp a)
+              (in_map (build_packet inp) (pi_assertions inp) a Hin) Hmat Hnok log)
+    as [e [He1 [He2 He3]]].
+  exists e. repeat split; assumption.
 Qed.

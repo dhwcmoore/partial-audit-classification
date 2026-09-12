@@ -98,30 +98,39 @@ Module Wirecard.
   Definition material_all (_ : WAssertion) : bool := true.
 
   (** A minimal registry: one proposing process, one verifying process,
-      distinct identities. *)
+      distinct identities, plus a second verifier used only by the
+      wrong-role adversarial fixture below (fixture 6), so that fixture
+      isolates "registered with the wrong role" from "same identity as
+      the admitting verifier" rather than conflating the two. *)
   Definition proposer : Process := mkProcess 1 Proposer.
   Definition verifier : Process := mkProcess 2 Verifier.
-  Definition registry : ProcessRegistry := [proposer; verifier].
-
-  Definition proposal_for (s : EvidenceState) : ClassificationProposal WAssertion :=
-    mkClassificationProposal 100 CashExistencePhilippineTrustee s (process_id proposer).
+  Definition verifier2 : Process := mkProcess 3 Verifier.
+  Definition registry : ProcessRegistry := [proposer; verifier; verifier2].
 
   Definition valid_cert : AdmissionCertificate :=
     mkAdmissionCertificate 100 (process_id verifier) true.
   Definition self_cert : AdmissionCertificate :=
     mkAdmissionCertificate 100 (process_id proposer) true.
 
-  Definition input_for (ctx : list WFact) (claimed : EvidenceState) (cert : option AdmissionCertificate)
+  (** No [claimed : EvidenceState] parameter here (v0.1 of this fixture
+      had one): [build_packet] (Pipeline.v) now constructs the
+      proposal's classification from the actual [classify] output for
+      the actual assertion, not from a value the fixture separately
+      asserted. There is consequently nothing left for a fixture, or
+      any other caller, to get out of sync with the real classification
+      -- the parameter that could have disagreed with it no longer
+      exists. *)
+  Definition input_for (ctx : list WFact) (cert : option AdmissionCertificate)
       : PipelineInput WFact WAssertion :=
     mkPipelineInput boundary WFactEq ctx 0
       [CashExistencePhilippineTrustee] material_all
-      (fun _ => proposal_for claimed) (fun _ => cert) registry.
+      (fun _ => 100) (fun _ => process_id proposer) (fun _ => cert) registry.
 
   (** Fixture 1: incomplete evidence. Classification is Undefined; no
       certificate is even presented, since there is nothing to admit.
       A residual is emitted for the failure to verify, and the opinion
       is inadmissible. *)
-  Definition input_incomplete := input_for observed_evidence Undefined None.
+  Definition input_incomplete := input_for observed_evidence None.
 
   Example fixture1_decision :
     decision_opinion (run_pipeline input_incomplete 0 []) =
@@ -139,7 +148,7 @@ Module Wirecard.
       classification failure, and the opinion is still inadmissible.
       This is the fixture that exercises the paper's two-conjunct rule
       most directly: state = Verified is necessary but not sufficient. *)
-  Definition input_no_certificate := input_for full_evidence Verified None.
+  Definition input_no_certificate := input_for full_evidence None.
 
   Example fixture2_decision :
     decision_opinion (run_pipeline input_no_certificate 0 []) =
@@ -154,7 +163,7 @@ Module Wirecard.
       identity is distinct from the proposer's. Classification is
       Verified, the certificate validates, no residual is left open,
       and the opinion is Unqualified. *)
-  Definition input_valid_admission := input_for full_evidence Verified (Some valid_cert).
+  Definition input_valid_admission := input_for full_evidence (Some valid_cert).
 
   Example fixture3_decision :
     decision_opinion (run_pipeline input_valid_admission 0 []) = Unqualified.
@@ -172,7 +181,7 @@ Module Wirecard.
       Verified. This is the fixture that exhibits Theorem 3 (No
       Self-Admission) inside the pipeline, not just at the level of the
       abstract [Role] type. *)
-  Definition input_self_certified := input_for full_evidence Verified (Some self_cert).
+  Definition input_self_certified := input_for full_evidence (Some self_cert).
 
   Example fixture4_decision :
     decision_opinion (run_pipeline input_self_certified 0 []) =
@@ -181,6 +190,57 @@ Module Wirecard.
 
   Example fixture4_residual_emitted :
     List.length (decision_residuals (run_pipeline input_self_certified 0 [])) = 1.
+  Proof. reflexivity. Qed.
+
+  (** ** Adversarial fixtures
+
+      Two classes of malformed input a v0.2 review found this
+      development did not yet reject.
+
+      Proposal/assertion substitution (a proposal returned for
+      assertion A actually naming assertion B) and
+      proposal/classification substitution (a proposal claiming
+      Verified when the real computed state disagrees) are not tested
+      here as fixtures, because [PipelineInput] no longer has a field
+      through which either is expressible: [build_packet]
+      (Pipeline.v) constructs the [ClassificationProposal] itself from
+      the real assertion and the real [classify] output, and
+      [build_packet_proposal_matches] (Pipeline.v) proves the two
+      always agree, for every [PipelineInput], not merely for the
+      fixtures below. There is consequently nothing left to write an
+      adversarial fixture *of*: the class of bug is gone by
+      construction, not merely rejected at validation time. *)
+
+  (** Fixture 5: complete evidence, a certificate that would otherwise
+      validate, but naming a proposer identifier ([999]) that is not
+      in the registry at all. [non_proposer_certificate_rejected]
+      (SelfAdmission.v) is what rejects this. *)
+  Definition input_unregistered_proposer : PipelineInput WFact WAssertion :=
+    mkPipelineInput boundary WFactEq full_evidence 0
+      [CashExistencePhilippineTrustee] material_all
+      (fun _ => 100) (fun _ => 999) (fun _ => Some valid_cert) registry.
+
+  Example fixture5_decision :
+    decision_opinion (run_pipeline input_unregistered_proposer 0 []) =
+      InadmissibleOpinion [InvalidCertificate CashExistencePhilippineTrustee].
+  Proof. reflexivity. Qed.
+
+  (** Fixture 6: complete evidence, a certificate that would otherwise
+      validate, but naming the second verifier's identity as the
+      proposer -- registered, distinct from the admitting verifier
+      (so the distinct-identity conjunct passes), but with [Verifier]
+      rather than [Proposer] authority. Isolates
+      [non_proposer_certificate_rejected] specifically, rather than
+      also tripping the distinct-identity check as reusing the
+      admitting verifier's own id would. *)
+  Definition input_wrong_role_proposer : PipelineInput WFact WAssertion :=
+    mkPipelineInput boundary WFactEq full_evidence 0
+      [CashExistencePhilippineTrustee] material_all
+      (fun _ => 100) (fun _ => process_id verifier2) (fun _ => Some valid_cert) registry.
+
+  Example fixture6_decision :
+    decision_opinion (run_pipeline input_wrong_role_proposer 0 []) =
+      InadmissibleOpinion [InvalidCertificate CashExistencePhilippineTrustee].
   Proof. reflexivity. Qed.
 
 End Wirecard.
@@ -242,21 +302,21 @@ Module ContinuousAuditing.
   Definition supervisor : Process := mkProcess 1 Verifier.
   Definition ca_registry : ProcessRegistry := [analyst; supervisor].
 
-  Definition ca_state (n : nat) : EvidenceState :=
-    classify boundary CAFactEq observed_evidence (Txn n).
-
-  Definition ca_proposal (n : nat) : ClassificationProposal CAAssertion :=
-    mkClassificationProposal n (Txn n) (ca_state n) (process_id analyst).
-
   Definition ca_certificate (n : nat) : option AdmissionCertificate :=
     if Nat.eqb n 0 then Some (mkAdmissionCertificate 0 (process_id supervisor) true)
     else if Nat.eqb n 1 then Some (mkAdmissionCertificate 1 (process_id supervisor) true)
     else None.
 
+  (** Proposal identity and proposer, not a complete proposal: see
+      Pipeline.v's PipelineInput docstring for why -- [build_packet]
+      constructs the proposal itself, from the real assertion and the
+      real classify output, so there is no field here through which a
+      mismatched assertion or classification could enter. *)
   Definition ca_input : PipelineInput CAFact CAAssertion :=
     mkPipelineInput boundary CAFactEq observed_evidence 0
       (map Txn (seq 0 10)) (fun _ => true)
-      (fun a => match a with Txn n => ca_proposal n end)
+      (fun a => match a with Txn n => n end)
+      (fun _ => process_id analyst)
       (fun a => match a with Txn n => ca_certificate n end)
       ca_registry.
 
@@ -370,23 +430,23 @@ Module SqlUnknown.
   Proof. discriminate. Qed.
 
   (** The downstream adapter cannot produce an admitted Verified
-      assertion merely from absence: for *any* registry, proposal, and
-      certificate an caller might supply -- not only the ones this
-      module happens to construct -- a pipeline run over an absent
-      score cannot decide Unqualified. This is
-      [pipeline_residual_implies_not_unqualified_witness]
+      assertion merely from absence: for *any* registry, proposal
+      identity/proposer, and certificate a caller might supply -- not
+      only the ones this module happens to construct -- a pipeline run
+      over an absent score cannot decide Unqualified. This is
+      [pipeline_failed_material_dependency_blocks_unqualified]
       (Pipeline.v) applied here, not a fact special to this fixture. *)
   Example absence_cannot_reach_unqualified :
     forall (registry : ProcessRegistry) (start_id : ResidualId) (log : RegisterLog SqlAssertion)
-      (proposal : SqlAssertion -> ClassificationProposal SqlAssertion)
+      (proposal_id_of : SqlAssertion -> ProposalId) (proposer_of : SqlAssertion -> ProcessId)
       (cert : SqlAssertion -> option AdmissionCertificate),
       let inp := mkPipelineInput sql_boundary SqlFactEq (context_for None) 0
-                   [RiskScoreAssertion] (fun _ => true) proposal cert registry in
+                   [RiskScoreAssertion] (fun _ => true) proposal_id_of proposer_of cert registry in
       decision_opinion (run_pipeline inp start_id log) <> Unqualified.
   Proof.
-    intros registry start_id log proposal cert inp.
+    intros registry start_id log proposal_id_of proposer_of cert inp.
     unfold inp.
-    eapply pipeline_residual_implies_not_unqualified_witness with (a := RiskScoreAssertion).
+    eapply pipeline_failed_material_dependency_blocks_unqualified with (a := RiskScoreAssertion).
     - left. reflexivity.
     - reflexivity.
     - unfold dep_ok, build_packet. simpl. reflexivity.

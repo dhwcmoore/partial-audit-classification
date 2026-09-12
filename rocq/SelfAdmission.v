@@ -23,11 +23,13 @@ Require Import PAC.Base.
 
     "Independent" here means, precisely: a distinct registered process
     identity, holding the Verifier role in the supplied registry, whose
-    certificate names the exact proposal being admitted. It does not
-    mean, and this development does not prove, that two distinct
-    identifiers cannot be controlled by the same person or organisation,
-    or that collusion between honestly single-role processes is
-    prevented. See NON_CLAIMS.md. *)
+    certificate names the exact proposal being admitted -- itself a
+    proposal from a distinct registered process identity holding the
+    Proposer role, not an unchecked assertion the caller could name
+    arbitrarily. It does not mean, and this development does not prove,
+    that two distinct identifiers cannot be controlled by the same
+    person or organisation, or that collusion between honestly
+    single-role processes is prevented. See NON_CLAIMS.md. *)
 
 Inductive Role := Proposer | Verifier.
 
@@ -100,7 +102,19 @@ Record AdmissionCertificate := mkAdmissionCertificate {
 (** The computational admission check. Every conjunct is load-bearing
     and each has its own rejection theorem below: a certificate that
     fails any one of them is not a valid admission, regardless of the
-    others. *)
+    others.
+
+    v0.2 review finding: the initial version of this development
+    checked the *verifier*'s registration and role but not the
+    *proposer*'s -- [proposal_process proposal] was accepted as
+    whatever [ProcessId] the caller's proposal happened to carry,
+    unchecked against the registry. Combined with a [PipelineInput]
+    that let a caller supply an arbitrary [ClassificationProposal] per
+    assertion (fixed in Pipeline.v; see that file's history), this
+    meant a proposal naming a fictitious or wrongly-roled proposer
+    could still validate. The sixth conjunct below closes that: the
+    proposing process, like the admitting one, must be registered and
+    must hold the [Proposer] role. *)
 Definition validate_admission {Assertion : Type}
     (registry : ProcessRegistry) (proposal : ClassificationProposal Assertion)
     (cert : AdmissionCertificate) : bool :=
@@ -110,6 +124,14 @@ Definition validate_admission {Assertion : Type}
        match process_role verifier_proc with
        | Verifier => true
        | Proposer => false
+       end
+   | None => false
+   end) &&
+  (match process_lookup registry (proposal_process proposal) with
+   | Some proposer_proc =>
+       match process_role proposer_proc with
+       | Proposer => true
+       | Verifier => false
        end
    | None => false
    end) &&
@@ -184,4 +206,74 @@ Proof.
     + rewrite (H verifier_proc eq_refl). reflexivity.
     + discriminate.
   - reflexivity.
+Qed.
+
+(** The symmetric check on the proposer: a proposal naming a process
+    that is not registered, or is registered with [Verifier] rather
+    than [Proposer] authority, cannot validate -- regardless of
+    whether the admitting verifier and certificate are otherwise
+    impeccable. Before this theorem (and the registry check it is
+    about) existed, [proposal_process proposal] was accepted
+    unchecked: a caller could name a process that does not appear in
+    the registry at all. *)
+Theorem non_proposer_certificate_rejected :
+  forall {Assertion : Type} (registry : ProcessRegistry)
+    (proposal : ClassificationProposal Assertion) (cert : AdmissionCertificate),
+    (forall proposer_proc, process_lookup registry (proposal_process proposal) = Some proposer_proc ->
+       process_role proposer_proc = Verifier) \/
+    process_lookup registry (proposal_process proposal) = None ->
+    validate_admission registry proposal cert = false.
+Proof.
+  intros Assertion registry proposal cert H.
+  unfold validate_admission.
+  destruct (Nat.eqb (admission_proposal_id cert) (proposal_id proposal)) eqn:Hid; [| reflexivity].
+  simpl.
+  destruct (process_lookup registry (admission_verifier cert)) as [verifier_proc |] eqn:Hvlookup;
+    [| reflexivity].
+  simpl.
+  destruct (process_role verifier_proc) eqn:Hvrole; [reflexivity |].
+  simpl.
+  destruct (process_lookup registry (proposal_process proposal)) as [proposer_proc |] eqn:Hplookup; simpl.
+  - destruct H as [H | H].
+    + rewrite (H proposer_proc eq_refl). reflexivity.
+    + discriminate.
+  - reflexivity.
+Qed.
+
+(** The two remaining conjuncts, each with its own rejection theorem,
+    completing coverage of all six. *)
+Theorem decision_false_certificate_rejected :
+  forall {Assertion : Type} (registry : ProcessRegistry)
+    (proposal : ClassificationProposal Assertion) (cert : AdmissionCertificate),
+    admission_decision cert = false ->
+    validate_admission registry proposal cert = false.
+Proof.
+  intros Assertion registry proposal cert Hdec.
+  unfold validate_admission.
+  destruct (Nat.eqb (admission_proposal_id cert) (proposal_id proposal)) eqn:Hid; [| reflexivity].
+  simpl.
+  destruct (process_lookup registry (admission_verifier cert)) as [verifier_proc |] eqn:Hvlookup;
+    [| reflexivity].
+  simpl.
+  destruct (process_role verifier_proc) eqn:Hvrole; [reflexivity |].
+  simpl.
+  destruct (process_lookup registry (proposal_process proposal)) as [proposer_proc |] eqn:Hplookup;
+    [| reflexivity].
+  simpl.
+  destruct (process_role proposer_proc) eqn:Hprole; [| reflexivity].
+  simpl.
+  destruct (negb (Nat.eqb (admission_verifier cert) (proposal_process proposal))) eqn:Hdistinct;
+    [| reflexivity].
+  simpl. rewrite Hdec. reflexivity.
+Qed.
+
+Theorem unverified_proposal_certificate_rejected :
+  forall {Assertion : Type} (registry : ProcessRegistry)
+    (proposal : ClassificationProposal Assertion) (cert : AdmissionCertificate),
+    proposal_classification proposal <> Verified ->
+    validate_admission registry proposal cert = false.
+Proof.
+  intros Assertion registry proposal cert Hneq.
+  destruct (validate_admission registry proposal cert) eqn:Hv; [| reflexivity].
+  apply valid_admission_implies_verified in Hv. contradiction.
 Qed.

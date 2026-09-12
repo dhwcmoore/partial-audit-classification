@@ -80,23 +80,25 @@ let wirecard_full : wfact list =
    module uses. *)
 let w_proposer : process = { process_id = 1; process_role = Proposer }
 let w_verifier : process = { process_id = 2; process_role = Verifier }
-let w_registry : processRegistry = [ w_proposer; w_verifier ]
-
-let w_proposal (claimed : evidenceState) : wassertion classificationProposal =
-  { proposal_id = 100; proposal_assertion = CashExistencePhilippineTrustee;
-    proposal_classification = claimed; proposal_process = w_proposer.process_id }
+let w_verifier2 : process = { process_id = 3; process_role = Verifier }
+let w_registry : processRegistry = [ w_proposer; w_verifier; w_verifier2 ]
 
 let w_valid_cert : admissionCertificate =
   { admission_proposal_id = 100; admission_verifier = w_verifier.process_id; admission_decision = true }
 let w_self_cert : admissionCertificate =
   { admission_proposal_id = 100; admission_verifier = w_proposer.process_id; admission_decision = true }
 
-let w_input (ctx : wfact list) (claimed : evidenceState) (cert : admissionCertificate option)
+(* No [claimed : evidenceState] parameter (v0.1 of this CLI had one):
+   [build_packet] constructs the proposal's classification from the
+   real [classify] output for the real assertion, mirroring the
+   Pipeline.v fix in rocq/Cases.v -- there is no longer a value here
+   that could disagree with the actual classification. *)
+let w_input (ctx : wfact list) (proposer_id : processId) (cert : admissionCertificate option)
     : (wfact, wassertion) pipelineInput =
   { pi_bspec = wirecard_boundary; pi_eq = wfeq; pi_context = ctx; pi_context_id = 0;
     pi_assertions = [ CashExistencePhilippineTrustee ]; pi_material = (fun _ -> true);
-    pi_proposal = (fun _ -> w_proposal claimed); pi_certificate = (fun _ -> cert);
-    pi_registry = w_registry }
+    pi_proposal_id = (fun _ -> 100); pi_proposer = (fun _ -> proposer_id);
+    pi_certificate = (fun _ -> cert); pi_registry = w_registry }
 
 let print_fixture label input =
   let result = run_pipeline input 0 [] in
@@ -111,13 +113,17 @@ let run_wirecard () =
   rule 70;
   Printf.printf "  Assertion: EUR 1.9bn held in Philippine trustee accounts\n\n";
   print_fixture "Fixture 1 -- incomplete evidence:"
-    (w_input wirecard_observed Undefined None);
+    (w_input wirecard_observed w_proposer.process_id None);
   print_fixture "Fixture 2 -- complete evidence, no admission certificate presented:"
-    (w_input wirecard_full Verified None);
+    (w_input wirecard_full w_proposer.process_id None);
   print_fixture "Fixture 3 -- complete evidence, admitted by a distinct verifier:"
-    (w_input wirecard_full Verified (Some w_valid_cert));
+    (w_input wirecard_full w_proposer.process_id (Some w_valid_cert));
   print_fixture "Fixture 4 -- complete evidence, proposer self-certifies:"
-    (w_input wirecard_full Verified (Some w_self_cert));
+    (w_input wirecard_full w_proposer.process_id (Some w_self_cert));
+  print_fixture "Fixture 5 -- unregistered proposer identity:"
+    (w_input wirecard_full 999 (Some w_valid_cert));
+  print_fixture "Fixture 6 -- proposer identity registered with the wrong role:"
+    (w_input wirecard_full w_verifier2.process_id (Some w_valid_cert));
   print_newline ()
 
 (* ---------- Case 2: Continuous auditing --------------------------- *)
@@ -146,12 +152,6 @@ let ca_analyst : process = { process_id = 0; process_role = Proposer }
 let ca_supervisor : process = { process_id = 1; process_role = Verifier }
 let ca_registry : processRegistry = [ ca_analyst; ca_supervisor ]
 
-let ca_state (n : int) : evidenceState = classify ca_boundary cafeq ca_observed (Txn n)
-
-let ca_proposal (n : int) : caassertion classificationProposal =
-  { proposal_id = n; proposal_assertion = Txn n; proposal_classification = ca_state n;
-    proposal_process = ca_analyst.process_id }
-
 let ca_certificate (n : int) : admissionCertificate option =
   if n = 0 then Some { admission_proposal_id = 0; admission_verifier = ca_supervisor.process_id; admission_decision = true }
   else if n = 1 then Some { admission_proposal_id = 1; admission_verifier = ca_supervisor.process_id; admission_decision = true }
@@ -160,7 +160,8 @@ let ca_certificate (n : int) : admissionCertificate option =
 let ca_input : (cafact, caassertion) pipelineInput =
   { pi_bspec = ca_boundary; pi_eq = cafeq; pi_context = ca_observed; pi_context_id = 0;
     pi_assertions = List.init 10 (fun n -> Txn n); pi_material = (fun _ -> true);
-    pi_proposal = (fun a -> match a with Txn n -> ca_proposal n);
+    pi_proposal_id = (fun a -> match a with Txn n -> n);
+    pi_proposer = (fun _ -> ca_analyst.process_id);
     pi_certificate = (fun a -> match a with Txn n -> ca_certificate n);
     pi_registry = ca_registry }
 

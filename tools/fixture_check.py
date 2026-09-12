@@ -12,13 +12,20 @@ import subprocess
 import sys
 
 EXPECTED = [
-    # Wirecard: the same four fixtures rocq/Cases.v proves by reflexivity
-    # (fixture{1,2,3,4}_decision), checked here against decide_opinion's
+    # Wirecard: the same six fixtures rocq/Cases.v proves by reflexivity
+    # (fixture{1..6}_decision), checked here against decide_opinion's
     # actual extracted output rather than the classification alone.
+    # Fixtures 4-6 all produce the same InvalidCertificate text (a
+    # self-certifying proposer, an unregistered proposer, and a
+    # wrong-role proposer are each rejected the same way at the
+    # opinion-decision level), so the fixture-label lines are what
+    # actually distinguishes them here.
     "Opinion:         Inadmissible [NotVerified(Undefined)]",
     "Opinion:         Inadmissible [MissingCertificate]",
     "Opinion:         Unqualified",
     "Opinion:         Inadmissible [InvalidCertificate]",
+    "Fixture 5 -- unregistered proposer identity:",
+    "Fixture 6 -- proposer identity registered with the wrong role:",
     # Continuous auditing: matches eight_residuals_from_pipeline and
     # no_residual_is_verified.
     "Txn 0: Verified",

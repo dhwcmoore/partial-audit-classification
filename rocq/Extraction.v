@@ -47,6 +47,6 @@ Extraction "audit_kernel.ml"
   mkDependencyPacket dep_assertion dep_material dep_state dep_proposal dep_certificate
   dep_valid_admission dep_ok decide_opinion
   mkPipelineInput pi_bspec pi_eq pi_context pi_context_id pi_assertions pi_material
-  pi_proposal pi_certificate pi_registry build_packet
+  pi_proposal_id pi_proposer pi_certificate pi_registry build_packet
   mkAuditDecision decision_classifications decision_residuals decision_opinion
   run_pipeline.

@@ -1,6 +1,7 @@
 Require Import List.
 Import ListNotations.
 Require Import Coq.Strings.String.
+Require Import Coq.Bool.Bool.
 Require Import PAC.Base.
 Require Import PAC.Boundary.
 Require Import PAC.SelfAdmission.
@@ -137,18 +138,30 @@ Qed.
     declared boundary's identity and version, the evidence context's
     identity, a fresh residual identifier, and a [DependencyPacket]
     (Admissibility.v), it returns the dependency's classification
-    together with a residual entry exactly when the dependency is not
-    [dep_ok] -- not both Verified and validly admitted. The owner field
-    is left unassigned ([None]) at emission time: this function only
-    emits, it does not itself assign risk ownership. *)
+    together with a residual entry exactly when the dependency is
+    material and not [dep_ok] -- not both Verified and validly
+    admitted. The owner field is left unassigned ([None]) at emission
+    time: this function only emits, it does not itself assign risk
+    ownership.
+
+    v0.2 review finding: an earlier version emitted for *every*
+    dependency failing [dep_ok], regardless of [dep_material], which
+    is broader than the STTT/AIS manuscripts' and NON_CLAIMS.md's
+    stated claim ("every material dependency..."); a non-material
+    failing dependency would have produced a residual with no
+    corresponding promise anywhere that it should. Emission is now
+    explicitly gated on materiality, matching the documented claim
+    exactly rather than a superset of it, with
+    [nonmaterial_emits_no_residual] below stating the excluded case
+    directly. *)
 Definition process_dependency {Assertion : Type}
     (registry : ProcessRegistry) (bid : BoundaryId) (bver : nat) (cid : ContextId)
     (rid : ResidualId) (d : DependencyPacket Assertion)
     : EvidenceState * option (ResidualEntry Assertion) :=
-  if dep_ok registry d
-  then (dep_state d, None)
-  else (dep_state d,
-        Some (mkResidualEntry rid (dep_assertion d) (dep_state d) bid bver cid (reason_for d) None)).
+  if dep_material d && negb (dep_ok registry d)
+  then (dep_state d,
+        Some (mkResidualEntry rid (dep_assertion d) (dep_state d) bid bver cid (reason_for d) None))
+  else (dep_state d, None).
 
 Theorem nonadmitted_material_emits_residual :
   forall {Assertion : Type} (registry : ProcessRegistry) (bid : BoundaryId) (bver : nat)
@@ -158,7 +171,7 @@ Theorem nonadmitted_material_emits_residual :
               residual_assertion e = dep_assertion d /\ residual_state e = dep_state d.
 Proof.
   intros Assertion registry bid bver cid rid d Hmat Hnok.
-  unfold process_dependency. rewrite Hnok.
+  unfold process_dependency. rewrite Hmat, Hnok.
   eexists. repeat split.
 Qed.
 
@@ -169,7 +182,18 @@ Theorem admitted_verified_emits_no_open_residual :
     snd (process_dependency registry bid bver cid rid d) = None.
 Proof.
   intros Assertion registry bid bver cid rid d Hok.
-  unfold process_dependency. rewrite Hok. reflexivity.
+  unfold process_dependency. rewrite Hok.
+  destruct (dep_material d); reflexivity.
+Qed.
+
+Theorem nonmaterial_emits_no_residual :
+  forall {Assertion : Type} (registry : ProcessRegistry) (bid : BoundaryId) (bver : nat)
+    (cid : ContextId) (rid : ResidualId) (d : DependencyPacket Assertion),
+    dep_material d = false ->
+    snd (process_dependency registry bid bver cid rid d) = None.
+Proof.
+  intros Assertion registry bid bver cid rid d Hmat.
+  unfold process_dependency. rewrite Hmat. reflexivity.
 Qed.
 
 (** [classify_and_register] folds [process_dependency] over a list of
@@ -215,4 +239,58 @@ Proof.
         as [states log'] eqn:Hrec.
       simpl.
       specialize (IH next_id log). rewrite Hrec in IH. exact IH.
+Qed.
+
+(** The theorem [pipeline_residual_implies_not_unqualified_witness]
+    (Pipeline.v) is named for a residual-to-decision relationship it
+    did not originally state -- its hypothesis was [dep_ok = false],
+    with no reference to [decision_residuals] at all. This theorem is
+    what actually earns that name: a specific material, failing
+    dependency's emitted entry is not merely blocked from
+    [Unqualified] (that much follows from [decide_opinion_blocked]
+    alone) but demonstrably present in [classify_and_register]'s
+    output log, wherever in the dependency list it occurs. *)
+Theorem classify_and_register_emits_for_dependency :
+  forall {Assertion : Type} (registry : ProcessRegistry) (bid : BoundaryId) (bver : nat)
+    (cid : ContextId) (next_id : ResidualId) (deps : list (DependencyPacket Assertion))
+    (d : DependencyPacket Assertion),
+    In d deps -> dep_material d = true -> dep_ok registry d = false ->
+    forall log : RegisterLog Assertion,
+      exists e, residual_assertion e = dep_assertion d /\ residual_state e = dep_state d /\
+                In e (snd (classify_and_register registry bid bver cid next_id deps log)).
+Proof.
+  intros Assertion registry bid bver cid next_id deps.
+  revert next_id.
+  induction deps as [| d0 rest IH]; intros next_id d Hin Hmat Hnok log.
+  - contradiction.
+  - simpl in Hin. destruct Hin as [Heq | Hin].
+    + subst d0.
+      simpl.
+      unfold process_dependency at 1.
+      rewrite Hmat, Hnok.
+      simpl.
+      set (e0 := mkResidualEntry next_id (dep_assertion d) (dep_state d) bid bver cid (reason_for d) None).
+      destruct (classify_and_register registry bid bver cid (S next_id) rest (e0 :: log))
+        as [states log'] eqn:Hrec.
+      simpl.
+      exists e0.
+      split; [reflexivity |]. split; [reflexivity |].
+      eapply residual_preservation_chain.
+      * pose proof (classify_and_register_step registry bid bver cid (S next_id) rest (e0 :: log)) as Hsteps.
+        rewrite Hrec in Hsteps. simpl in Hsteps. exact Hsteps.
+      * left. reflexivity.
+    + simpl.
+      destruct (process_dependency registry bid bver cid next_id d0) as [s [e |]] eqn:Hpd.
+      * destruct (classify_and_register registry bid bver cid (S next_id) rest (e :: log))
+          as [states log'] eqn:Hrec.
+        simpl.
+        destruct (IH (S next_id) d Hin Hmat Hnok (e :: log)) as [w [Hw1 [Hw2 Hw3]]].
+        exists w. repeat split; try assumption.
+        rewrite Hrec in Hw3. exact Hw3.
+      * destruct (classify_and_register registry bid bver cid next_id rest log)
+          as [states log'] eqn:Hrec.
+        simpl.
+        destruct (IH next_id d Hin Hmat Hnok log) as [w [Hw1 [Hw2 Hw3]]].
+        exists w. repeat split; try assumption.
+        rewrite Hrec in Hw3. exact Hw3.
 Qed.

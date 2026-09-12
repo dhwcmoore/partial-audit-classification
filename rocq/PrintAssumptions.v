@@ -40,6 +40,9 @@ Print Assumptions SelfAdmission.valid_admission_implies_distinct_process.
 Print Assumptions SelfAdmission.proposer_certificate_rejected.
 Print Assumptions SelfAdmission.certificate_for_wrong_proposal_rejected.
 Print Assumptions SelfAdmission.non_verifier_certificate_rejected.
+Print Assumptions SelfAdmission.non_proposer_certificate_rejected.
+Print Assumptions SelfAdmission.decision_false_certificate_rejected.
+Print Assumptions SelfAdmission.unverified_proposal_certificate_rejected.
 
 Print Assumptions Admissibility.default_free_admissibility.
 Print Assumptions Admissibility.contrapositive_inadmissible.
@@ -59,7 +62,11 @@ Print Assumptions Residual.residual_preservation_chain.
 Print Assumptions Residual.orphan_escalation_sound.
 Print Assumptions Residual.nonadmitted_material_emits_residual.
 Print Assumptions Residual.admitted_verified_emits_no_open_residual.
+Print Assumptions Residual.nonmaterial_emits_no_residual.
 Print Assumptions Residual.classify_and_register_step.
+Print Assumptions Residual.classify_and_register_emits_for_dependency.
 
+Print Assumptions Pipeline.build_packet_proposal_matches.
 Print Assumptions Pipeline.pipeline_unqualified_sound.
-Print Assumptions Pipeline.pipeline_residual_implies_not_unqualified_witness.
+Print Assumptions Pipeline.pipeline_failed_material_dependency_blocks_unqualified.
+Print Assumptions Pipeline.pipeline_failed_material_dependency_emits_residual.
