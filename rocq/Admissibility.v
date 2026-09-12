@@ -15,14 +15,22 @@ Require Import PAC.SelfAdmission.
     [OpinionAdmissible] is not a separate postulate: it *is* the
     definition of what "admissible as an unqualified opinion" means, so
     [default_free_admissibility] is a direct unfolding of that
-    definition. That is deliberate and is the whole point of the
-    papers' claim that the type error is "unrepresentable" rather than
-    merely discouraged: there is no other constructor in this
-    development for "an opinion is admissible as unqualified" that
-    bypasses the per-assertion check. The non-trivial content is in the
-    Corollary, which is what a reviewer would actually want to see: a
-    single Undefined material dependency is enough to rule out
-    admissibility, however many other dependencies are Verified.
+    definition: there is no other constructor of this specific,
+    Prop-valued predicate for "an opinion is admissible as unqualified"
+    that bypasses the per-assertion check, which is what "unrepresentable"
+    can honestly mean *for this declarative layer specifically* -- no
+    proof of [OpinionAdmissible] is derivable without discharging the
+    check. It is not, and the papers no longer present it as, the
+    operative claim about the executable pipeline: [decide_opinion]
+    (Admissibility.v, below) and [run_pipeline] (Pipeline.v) are
+    ordinary data-returning functions, and nothing stops a caller from
+    constructing their result values directly; what is proved about
+    them is soundness of a function, stated as such throughout both
+    manuscripts' Formal Development / Formal Statement sections rather
+    than as unconstructibility of a type. The non-trivial content here
+    is in the Corollary, which is what a reviewer would actually want
+    to see: a single Undefined material dependency is enough to rule
+    out admissibility, however many other dependencies are Verified.
 
     v0.2 status: this module is carried over from v0.1 with only the
     mechanical updates needed to compile against the v0.2 [Boundary.v]

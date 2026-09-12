@@ -2,8 +2,8 @@
 
 Read this before reading any proof or CLI output as an assurance. It governs
 both accompanying manuscripts, "A Discipline of Partial Audit Classification"
-(submitted, STTT) and "Boundary Discipline for Accounting Information
-Systems" (submitted, IJDAR).
+(in preparation for submission, STTT) and "Boundary Discipline for
+Accounting Information Systems" (in preparation for submission, IJDAR).
 
 ## v0.2 scope (frozen before implementation)
 

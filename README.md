@@ -19,11 +19,11 @@ This repository is the accompanying formal development for two manuscripts
 by the same author:
 
 - *A Discipline of Partial Audit Classification: On the Correct Treatment
-  of Undefined Audit Assertions* (submitted, *International Journal on
-  Software Tools for Technology Transfer*)
+  of Undefined Audit Assertions* (in preparation for submission to
+  *International Journal on Software Tools for Technology Transfer*)
 - *Boundary Discipline for Accounting Information Systems: On the Correct
-  Treatment of Undefined Audit Assertions* (submitted, *International
-  Journal of Digital Accounting Research*)
+  Treatment of Undefined Audit Assertions* (in preparation for submission
+  to *International Journal of Digital Accounting Research*)
 
 Both papers describe the same underlying formalism from two different
 angles (formal methods and tooling; accounting information systems). This

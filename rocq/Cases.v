@@ -380,9 +380,9 @@ Module SqlUnknown.
       toy: presence of a risk score is boundary evidence like any
       other, so absence classifies Undefined *by construction*, through
       the same [classify] every other fixture uses, and
-      [pipeline_residual_implies_not_unqualified_witness] (Pipeline.v)
-      is what rules out an absent score ever reaching Unqualified --
-      not a fact re-derived for this module specifically. *)
+      [pipeline_failed_material_dependency_blocks_unqualified]
+      (Pipeline.v) is what rules out an absent score ever reaching
+      Unqualified -- not a fact re-derived for this module specifically. *)
 
   Inductive SqlFact := ScoreIsPresent.
   Inductive SqlAssertion := RiskScoreAssertion.
