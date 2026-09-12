@@ -103,15 +103,15 @@ The central invariant can now be stated. Everything else in the paper is support
 % the lstlisting blocks.
 \begin{rul}[Central Invariant]
 \label{rule:invariant}
-No audit conclusion may depend on a material assertion whose verification state is undefined.
+No unmodified audit opinion may rely affirmatively on a material assertion unless that assertion is classified Verified and validly admitted. Any material assertion that is unresolved must constrain, modify, or preclude the opinion; a qualified opinion or disclaimer may, and typically does, depend on exactly such an assertion. The invariant restricts what an unqualified opinion may depend on, not what any opinion may mention.
 \end{rul}
 
 In symbolic form:
 
 \begin{lstlisting}
-Admissible(Opinion) =>
+Unqualified(Opinion) =>
   for every material assertion a used by Opinion:
-      state(a) = Verified
+      state(a) = Verified and admitted(a)
 \end{lstlisting}
 
 Equivalently, and more sharply:
@@ -195,7 +195,7 @@ The only state transition this paper's formal development models is the residual
 
 \begin{definition}[Admissibility]
 \label{def:admissibility}
-A material assertion $a$ is admissible for an unqualified audit conclusion if and only if $\mathrm{state}(a) = \state{Verified}$ under the declared boundary specification, and the classification was admitted by a verifier independent of the process that proposed it.
+A material assertion $a$ is admissible for an unqualified audit conclusion if and only if $\mathrm{state}(a) = \state{Verified}$ under the declared boundary specification, and the classification was admitted by a distinct, registered identity holding verifier authority, checked against the process that proposed it (what "independent" does and does not mean here is stated precisely below).
 \end{definition}
 
 \begin{lstlisting}
@@ -318,13 +318,15 @@ Assertion:
   A = "Wirecard holds EUR 1.9bn in Philippine trustee accounts."
 
 Required boundary for material cash existence:
-  direct bank confirmation, authenticated route,
-  cooperative jurisdiction
+  direct bank confirmation, route controlled by auditor,
+  authenticated channel, jurisdiction in which the auditor's
+  own procedure permits direct confirmation
 
 Observed evidence:
   no authenticated direct bank confirmation
+  confirmation routed through a third-party trustee for years,
+  never established directly by the auditor
   intermediary documentation (screenshots, trustee statements)
-  jurisdictional obstruction
 
 Precondition check (direct bank confirmation):
   confirmation route controlled by auditor .... FAILED
@@ -343,7 +345,7 @@ Violation:
   Undefined(A) was converted into Accepted(A)
 \end{lstlisting}
 
-The claim made by this trace is deliberately narrow. The discipline would not have prevented the fraud, and it compels no particular exercise of judgement. It would have changed the classification state of assertion $A$: the evidential obstruction would have been recorded as \state{Undefined}, with a registered residual and an inadmissible unqualified opinion, rather than passing as ordinary acceptance. The jurisdictional, evidence-quality, and control-boundary failures that enabled the fraud are, in this vocabulary, three failed preconditions whose failure the legacy system did not record.
+The claim made by this trace is deliberately narrow. The discipline would not have prevented the fraud, and it compels no particular exercise of judgement. It would have changed the classification state of assertion $A$: the evidential obstruction would have been recorded as \state{Undefined}, with a registered residual and an inadmissible unqualified opinion, rather than passing as ordinary acceptance. The confirmation-route, evidence-quality, and authentication-channel failures that enabled the fraud are, in this vocabulary, three failed preconditions whose failure the legacy system did not record. The jurisdiction itself was not the obstruction: when it was finally engaged directly, in June 2020, the named banks responded promptly, denying the accounts existed. The obstruction was that the auditor's own process routed confirmation through a third-party trustee instead, for years, rather than exercising direct confirmation at all.
 
 The accompanying development exercises five further variations on this same assertion, not only the one above, because \state{Undefined} is only one of several ways an unqualified opinion is ruled out. With every precondition satisfied, the assertion classifies \state{Verified} -- the boundary specification is not vacuous -- but that alone is not enough: presented with no admission certificate at all, the opinion remains inadmissible for want of one; presented with a certificate in which the proposing process names itself as its own admitting verifier, or names a proposer that is unregistered or registered with the wrong authority, the certificate is rejected -- the first by exactly the mechanism of Theorem~\ref{thm:selfadmission} -- and the opinion remains inadmissible; only when a certificate from a distinct, correctly registered verifier admits a correctly registered proposer's proposal does the opinion become admissible as unqualified. Section~\ref{sec:formal} states the outcome of all six fixtures precisely.
 
@@ -546,7 +548,7 @@ Theorem no_self_admission :
 
 \begin{theorem}[Default-Free Admissibility]
 \label{thm:main}
-For any audit opinion $O$, if $O$ is unqualified, then every material assertion on which $O$ depends is classified \state{Verified} under the declared boundary specification and admitted by an independent verifier.
+For any audit opinion $O$, if $O$ is unqualified, then every material assertion on which $O$ depends is classified \state{Verified} under the declared boundary specification and admitted by a distinct, registered identity holding verifier authority.
 \end{theorem}
 
 \begin{corollary}[Contrapositive]
@@ -561,7 +563,7 @@ Every non-affirmative classification of a material assertion writes an entry to 
 
 \begin{theorem}[No Self-Admission]
 \label{thm:selfadmission}
-A proposed classification cannot admit itself. Admission is performed only by a verifier independent of the process that generated the proposal.
+A proposed classification cannot be admitted by the same registered process identity that generated it. Admission requires a distinct, registered identity holding verifier authority; whether two distinct registered identities are organisationally, economically, or substantively independent of one another is a governance question outside what this theorem addresses.
 \end{theorem}
 
 These four statements are still proved and still true; they are no longer presented as the central result, because a \texttt{Prop} defined to already contain the desired property, however genuinely proved, is a different kind of claim from soundness of a decision procedure that computes. The predicate is named \texttt{independently\_admitted} rather than \texttt{admitted} precisely because \texttt{Admitted} is a reserved proof-closing command in Coq/Rocq; naming a semantic predicate identically to that tactic is the kind of small inconsistency the discipline itself warns against, so the development avoids it throughout. \texttt{step} is the register's transition relation under any workflow operation; the theorem states that every such step is log-extending, never log-shrinking. \texttt{admits} is deliberately a relation on the process performing admission rather than on the assertion alone, so that \texttt{no\_self\_admission} cannot be discharged by a proposing process simply relabelling itself.
@@ -812,8 +814,8 @@ The following requirements illustrate how the discipline could be codified in a 
 \begin{enumerate}
 \item Verification boundaries must be declared for all material assertion classes as versioned, machine-readable data specifying procedures, jurisdictions, evidence grades, and supportable materiality, together with the precondition set of each procedure.
 \item Classification of assertions against declared boundaries must be mechanical, and assertions for which no declared procedure's preconditions hold must be classified \state{Undefined}.
-\item Every non-affirmative classification of a material assertion must write a durable entry to a residual register identifying the residual and its owner, with orphaned residuals escalated.
-\item An unqualified conclusion is admissible only if every material assertion on which it depends is an admitted \state{Verified} classification, where admission is performed by a verifier independent of every proposing process.
+\item Every non-affirmative classification of a material assertion must write a durable entry to a residual register identifying the residual and either an identified owner or an explicit orphan flag triggering escalation.
+\item An unqualified conclusion is admissible only if every material assertion on which it depends is an admitted \state{Verified} classification, where admission is performed by a distinct, registered identity holding verifier authority, separate from every proposing process.
 \item Inspection must measure boundary coverage, undefined-region materiality, and residual assignment from the declared specifications and classification logs rather than from declared policy.
 \end{enumerate}
 
