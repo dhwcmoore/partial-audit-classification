@@ -15,5 +15,11 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq coq ocaml-nox ocaml-findlib ocaml-dune
 
+      - name: Report toolchain versions
+        run: |
+          coqc --version
+          ocaml -version
+          dune --version
+
       - name: make verify
         run: make verify

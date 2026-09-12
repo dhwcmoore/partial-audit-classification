@@ -44,20 +44,26 @@
 
 \newcommand{\state}[1]{\textsf{#1}}
 
-\title{A Discipline of Partial Audit Classification \subtitle{On the Correct Treatment of Undefined Audit Assertions}}
+\title{A Discipline of Partial Audit Classification}
+\subtitle{On the Correct Treatment of Undefined Audit Assertions}
 
 \author{Duston Moore}
 
 \institute{D.~Moore \at
 Independent Researcher, Edmonton, Alberta, Canada \\
 \email{dhwcmoore@gmail.com}}
+% NOTE: author identification appears above per this preamble's current
+% (non-final) svjour3 setup. STTT/Equinocs may require a blinded review
+% copy; confirm the journal's current anonymous-review policy before
+% submission and, if required, detach or redact this block for the
+% review copy -- this decision has not been made in this draft.
 
 \begin{document}
 
 \maketitle
 
 \begin{abstract}
-Audit systems sometimes use unverifiable assertions. This is a classification error, and it has a precise form: an assertion of type \state{Undefined} is used where an assertion of type \state{Verified} is required. This paper develops a discipline that makes the error structurally inadmissible. The discipline rests on one invariant: no audit conclusion may depend on a material assertion whose verification state is undefined. The paper defines a typed state space for audit assertions, an admissibility rule restricting unqualified conclusions to admitted \state{Verified} assertions, preconditions and postconditions for verification procedures, a residual register that preserves everything a procedure does not establish, and a composition rule under which an opinion inherits the weakest unresolved material assertion on which it depends. \state{Undefined} is presented throughout as a success state: it is the correct output of a classifier that has refused to speak beyond its boundary. The Wirecard collapse is treated not as motivation but as a classification trace exhibiting a violation of the invariant, and continuous auditing exception queues and SQL's three-valued \state{Unknown} supply the same violation at ordinary scale. A machine-checked sketch of the central admissibility theorem demonstrates that the discipline is implementable. The method does not prevent fraud. It prevents an audit classification system from treating an undefined material assertion as verified, which is a narrower and therefore provable claim.
+Audit systems sometimes use unverifiable assertions. This is a classification error, and it has a precise form, close enough to a type error to justify the analogy throughout this paper: an assertion classified \state{Undefined} is used where an assertion classified \state{Verified} is required. This paper develops a discipline that makes the error structurally inadmissible and implements it as an executable pipeline: boundary classification computes \state{Verified} or \state{Undefined} from a declared, versioned boundary specification; independent admission is certificate-based, checked against a declared process registry rather than asserted by a bare role label; every material dependency that is not both classified \state{Verified} and validly admitted automatically writes a durable entry to an append-only residual register; and an extracted opinion-decision procedure is proved sound and complete: it returns an unqualified decision if and only if every material dependency is verified and validly admitted. The central invariant these mechanisms jointly enforce is stated once and used throughout: no audit conclusion may depend on a material assertion whose verification state is undefined. \state{Undefined} is presented as a success state: it is the correct output of a classifier that has refused to speak beyond its boundary. The Wirecard collapse is treated not as motivation but as a classification trace exhibiting a violation of the invariant, and continuous auditing exception queues and SQL's three-valued \state{Unknown} supply the same violation at ordinary scale, each exercised as a fixture run through the pipeline rather than described only in prose. The development is machine-checked in Coq/Rocq -- a classification kernel and extracted reference implementation, not merely a sketch -- and every stage is proved sound individually before the end-to-end soundness theorem composes them. The method does not prevent fraud, does not establish that supplied evidence is genuine or that supplied materiality judgements are correct, and does not prove that distinct registered identities are free of collusion or organisational dependence; evidence authenticity and materiality selection remain the caller's responsibility throughout. It prevents an audit classification system from treating an undefined material assertion as verified, which is a narrower and therefore provable claim.
 \keywords{audit classification \and verification failure \and partial functions \and admissibility \and three-valued logic \and formal methods \and accounting information systems}
 \end{abstract}
 
@@ -66,11 +72,11 @@ Audit systems sometimes use unverifiable assertions. This is a classification er
 
 An audit is, among other things, a classification system. It receives assertions together with evidence and it produces classifications on which conclusions depend. The problem addressed in this paper is that audit systems sometimes use unverifiable assertions, and that they do so silently. An assertion that could not be verified within the evidence, authority, and observation boundaries available to the system is nonetheless treated, downstream, as though it had been verified.
 
-This is not a moral failure and it is not, in the first instance, a regulatory failure. It is a type error. An assertion of type \state{Undefined} is being used where an assertion of type \state{Verified} is required. The remainder of this paper is the discipline that makes the type error inadmissible.
+This is not a moral failure and it is not, in the first instance, a regulatory failure. It is close enough to a type error to be usefully treated as one: an assertion classified \state{Undefined} is being used where an assertion classified \state{Verified} is required. The analogy is deliberate and is used throughout this paper as an engineering description of the failure, not as a literal claim about the type system of any particular implementation language; where the accompanying Coq/Rocq development makes a genuinely type-theoretic version of the claim (Section~\ref{sec:formal}), that is stated separately and more narrowly. The remainder of this paper is the discipline that makes the error structurally inadmissible.
 
 Three terms are needed and are used consistently throughout. \emph{Verification failure} is the condition in which a system cannot determine whether a claim is verified or refuted within its available boundaries. An \emph{implicit default} is the local rule, convention, or implementation path that fills the resulting gap, typically with acceptance. \emph{Silent conversion} is the system-level result: the unresolved claim is treated as accepted, and no explicit failure state records that this happened.
 
-The classification function of a conventional audit system is total. It produces an output for every input, including inputs over which it has no verified authority, and the convenient output for such inputs is acceptance. The classification function of a disciplined audit system is partial, and honestly so. Where it has no authority, it says so:
+Audit standards already distinguish sufficient evidence from its absence, and provide qualified opinions and disclaimers precisely for cases of evidential insufficiency \citep{isa500, isa705}. The failure this paper targets is not that auditing lacks any concept of insufficient evidence; Section~\ref{sec:related} argues at length that it does not. The failure is narrower and more specific: some audit workflows operationally behave as though an unresolved input had been accepted, even where the standard itself provides an explicit non-affirmative channel, because nothing in the classification \emph{logic} of the surrounding system forces that channel to be taken rather than silently bypassed. The substantive partiality is in the verification procedure, not in the classifier built around it: a procedure such as direct bank confirmation is genuinely partial over its intended domain, defined only where its preconditions hold. The discipline of this paper does not leave that partiality unresolved at the point of audit consequence. It totalises it honestly, by returning an explicit \state{Undefined} result outside the verified domain rather than either an undefined program state or a convenient default:
 
 \begin{lstlisting}
 cannot verify -> accept        (undisciplined)
@@ -114,7 +120,21 @@ Equivalently, and more sharply:
 state(a) = Undefined => a is inadmissible for an unqualified opinion
 \end{lstlisting}
 
-The paper proceeds by construction. Section~\ref{sec:states} defines the state space. Section~\ref{sec:admissibility} defines admissibility. Section~\ref{sec:boundaries} defines boundaries and gives every verification procedure a precondition and a postcondition. Section~\ref{sec:residuals} defines residuals and the register that preserves them. Section~\ref{sec:composition} gives the composition rule for opinions. Section~\ref{sec:examples} exhibits three violations of the invariant: Wirecard as a classification trace, continuous auditing exception queues as an algorithm, and SQL \state{Unknown} as a semantic error at the application layer. Section~\ref{sec:formal} gives the formal sketch. Section~\ref{sec:related} states, briefly, what existing literatures supply and what they do not. Section~\ref{sec:implications} draws consequences for accounting information systems, for standards, and for AI-assisted audit tools.
+\subsection*{Contributions}
+
+This paper's contribution is seven pieces built and machine-checked as one development, not seven separate claims:
+
+\begin{enumerate}
+\item a declared, typed audit-classification state model (Section~\ref{sec:states});
+\item a versioned boundary evaluation mechanism that computes \state{Verified} or \state{Undefined} from a declared specification and an evidence context, with a proved witness for every \state{Verified} outcome (Section~\ref{sec:boundaries}, Section~\ref{sec:formal});
+\item certificate-based admission separation: an admission certificate is checked against a declared process registry, not asserted by a bare role label (Section~\ref{sec:admissibility}, Section~\ref{sec:formal});
+\item automatic residual emission and append-only preservation for every material dependency that is not both verified and validly admitted (Section~\ref{sec:residuals});
+\item an executable opinion-decision procedure, proved sound and complete over the properties above (Section~\ref{sec:formal});
+\item Rocq soundness theorems for every stage individually and for their composition into one end-to-end pipeline (Section~\ref{sec:formal});
+\item an extracted OCaml implementation and reproducible fixtures exercising all of the above on three worked cases (Section~\ref{sec:examples}, Section~\ref{sec:formal}).
+\end{enumerate}
+
+The paper proceeds by construction. Section~\ref{sec:states} defines the state space. Section~\ref{sec:admissibility} defines admissibility. Section~\ref{sec:boundaries} defines boundaries and gives every verification procedure a precondition and a postcondition. Section~\ref{sec:residuals} defines residuals and the register that preserves them. Section~\ref{sec:composition} gives the composition rule for opinions. Section~\ref{sec:examples} exhibits three violations of the invariant: Wirecard as a classification trace, continuous auditing exception queues as an algorithm, and SQL \state{Unknown} as a semantic error at the application layer. Section~\ref{sec:formal} gives the formal development. Section~\ref{sec:related} states what existing literatures supply and what they do not. Section~\ref{sec:implications} draws consequences for accounting information systems, for standards, and for AI-assisted audit tools.
 
 \section{States}
 \label{sec:states}
@@ -142,7 +162,7 @@ AuditUse ::=
   | Inadmissible
 \end{lstlisting}
 
-The BNF above fixes the vocabulary informally; the Coq/Rocq development declares the same states as an inductive type, so that the formal sketch of Section~\ref{sec:formal} is stated over exactly this vocabulary rather than a re-encoding of it:
+The BNF above fixes the vocabulary informally; the Coq/Rocq development declares the same six constructors as an inductive type, so that the formal development of Section~\ref{sec:formal} is stated over exactly this vocabulary rather than a re-encoding of it:
 
 \begin{lstlisting}
 Inductive EvidenceState : Type :=
@@ -158,7 +178,13 @@ Inductive AuditUse : Type :=
   | Inadmissible.
 \end{lstlisting}
 
-The states have the following meanings and no others. \state{Verified}: the assertion falls within a declared boundary and the evidence grade that boundary requires is present. \state{Refuted}: admissible evidence establishes that the assertion is false. \state{Undefined}: the assertion falls outside all declared boundaries, or the required evidence grade is absent, and no admissible procedure currently resolves it. \state{PresumptivelyVerified} and \state{PresumptivelyRefuted}: available evidence leans one way without meeting the declared grade for the assertion's materiality. \state{EscalationRequired}: the assertion exposes a defect in the boundary specification itself, such as a conflict, an overlap, or an assertion class for which no boundary was declared.
+The states have the following meanings and no others. \state{Verified}: the assertion falls within a declared boundary and the evidence grade that boundary requires is present. \state{Refuted}: a resolved negative classification -- admissible evidence establishes that the assertion is false, not merely that it leans false. \state{Undefined}: the assertion falls outside all declared boundaries, or the required evidence grade is absent, and no admissible procedure currently resolves it. \state{PresumptivelyVerified} and \state{PresumptivelyRefuted}: available evidence leans one way without meeting the declared grade for the assertion's materiality; these are unresolved, not resolved-in-either-direction. \state{EscalationRequired}: the assertion exposes a defect in the boundary specification itself, such as a conflict, an overlap, or an assertion class for which no boundary was declared.
+
+Production and mechanisation are not the same claim, and this paper is explicit about the boundary between them, exactly matching the accompanying development. Only two of the six states are produced by a declared, generic, machine-checked procedure: the boundary evaluation function of Section~\ref{sec:boundaries} (\texttt{classify} in the Coq/Rocq development) computes \state{Verified} when a declared procedure's preconditions are satisfied by the evidence context, and \state{Undefined} otherwise, and no third branch exists for it to take. \state{Refuted}, the two presumptive states, and \state{EscalationRequired} are declared vocabulary with the meanings above; they are legitimate inputs to every downstream mechanism in this paper -- composition (Section~\ref{sec:composition}), residual emission (Section~\ref{sec:residuals}), and the opinion decision (Section~\ref{sec:formal}) all accept a dependency already classified into any of the six states, and the theorems of Section~\ref{sec:formal} are stated generally enough to cover that case -- but no generic, proved-correct procedure for \emph{assigning} one of these four states from a boundary specification and an evidence context is formalised in the accompanying development. There is consequently no state precedence to state here: where an earlier informal presentation of this discipline suggested one, the machine-checked version does not implement it, and this paper states the narrower, implemented claim rather than the broader one.
+
+\state{EscalationRequired} is declared vocabulary describing a defect in a boundary specification, not a workflow status a queue-management system would assign; nothing in this paper's formal development computes it. The distinction between a classification state and a review status matters most for the continuous-auditing case (Section~\ref{sec:ca}): a transaction's \emph{classification} is exactly one of the six states above, computed or declared; its \emph{review status} (reviewed, queued, deprioritised) is workflow metadata the boundary machinery does not itself track. Section~\ref{sec:ca} accordingly does not introduce a separate \state{Unreviewed} classification state; a deprioritised transaction is \state{Undefined}, in the same sense and by the same mechanism as any other assertion outside its verified domain.
+
+The only state transition this paper's formal development models is the residual register's append-only \texttt{step} relation (Section~\ref{sec:residuals}): new entries are added, and no entry is edited, removed, or reclassified once it exists. Nothing in the accompanying development transitions an assertion's own classification from one state to another; each classification is computed once, from a fixed boundary specification and evidence context, and revising it means supplying a new context and computing again (Section~\ref{sec:boundaries}'s monotonicity property covers exactly this case).
 
 \begin{remark}
 \state{Undefined} is a success state. A classifier that returns \state{Undefined} for an input outside its verified domain has computed the correct answer. The failure states of an audit classification system are not its \state{Undefined} outputs; they are its affirmative outputs on inputs it had no authority to classify.
@@ -178,11 +204,11 @@ admissible(a) = true
   and  admitted_by(independent_verifier, a)
 \end{lstlisting}
 
-Both conjuncts are load-bearing. The first excludes every non-\state{Verified} state; the second excludes a \state{Verified} classification that a proposing process assigned to its own output, which is precisely the failure mode Theorem~\ref{thm:selfadmission} rules out.
+Both conjuncts are load-bearing. The first excludes every non-\state{Verified} state; the second excludes a \state{Verified} classification that a proposing process assigned to its own output, which is precisely the failure mode Theorem~\ref{thm:selfadmission} rules out. In the accompanying development, \texttt{admitted\_by(independent\_verifier, a)} is not a bare predicate asserted true or false at the call site; it is the outcome of an explicit \emph{admission certificate} check against a declared process registry. A certificate is accepted only if all of the following hold: it names the exact proposal it admits, rather than any proposal for the same assertion; the admitting process is present in the declared registry and holds verifier authority there; that process's identity is distinct from the identity that proposed the classification; the admission decision it carries is affirmative; and the proposal it admits itself claims \state{Verified}. Each of these five conditions has its own rejection case in the formal development (Section~\ref{sec:formal}): a certificate naming the wrong proposal, one presented by an unregistered or non-verifying process, and one presented by the proposer itself are each independently ruled out. ``Independent'' in this paper means precisely this: a distinct, registered identity holding verifier authority in the declared registry, checked against the exact proposal. It does not mean, and this paper does not claim, that two distinct registered identities cannot be controlled by the same person or organisation, or that collusion between two honestly single-role identities is prevented; the registry establishes role and identity separation within itself, not organisational independence from anything outside it.
 
 Presumptive states may guide triage. They order queues, allocate investigative attention, and inform planning. They may not support an unqualified conclusion. The moment a presumptive state binds consequence, the discipline has been abandoned, because a presumptive state is precisely a state whose evidence does not meet the declared grade.
 
-Professional judgement is not denied by this rule; it is relocated. Judgement enters only in the declaration of thresholds, evidence classes, boundaries, and admissibility rules. Once declared, those rules are applied mechanically. Judgement is exercised at specification time. It is not available as an invisible runtime patch applied to individual assertions after the evidence has disappointed.
+Professional judgement is not denied by this rule; it is constrained in where it may act without leaving a trace. Judgement may establish or revise thresholds, materiality, evidence assessments, and boundary specifications -- that is where it belongs, and nothing in this paper removes it from there. What it may not do is depart, at the point of a single assertion's classification, from a condition the declared specification requires, without that departure itself being recorded as an explicit, versioned revision to the specification rather than a silent override applied after the evidence has disappointed. The boundary and admission machinery of this paper does not choose thresholds or assign materiality; it enforces that whatever thresholds and materiality judgements were declared are the ones actually applied.
 
 \section{Boundaries and Preconditions}
 \label{sec:boundaries}
@@ -205,8 +231,12 @@ Preconditions:
   response is received through an authenticated channel
 
 Postcondition:
-  the cash-existence assertion may be classified Verified
+  the specified account-balance existence assertion, for the
+  specified entity and date, may be classified Verified and
+  may proceed to admission review
 \end{lstlisting}
+
+The postcondition is deliberately narrow in a second way, beyond stating a classification rather than a conclusion: direct bank confirmation, even fully satisfied, establishes only \emph{existence} of the specified balance, for the specified entity and date. It does not establish rights and obligations (whether the entity actually controls the balance free of restriction), valuation (whether the recorded amount is correct at the relevant measurement basis), or completeness (whether all such balances have been identified). Each of those is a distinct assertion class with its own boundary specification and its own procedures; a single confirmation response does not discharge all of them merely because they concern the same underlying account, and a boundary specification that let it do so would itself be the kind of defect \state{EscalationRequired} (Section~\ref{sec:states}) exists to name.
 
 If any precondition fails, the procedure cannot produce \state{Verified}. Not should not: cannot, within the declared system. A confirmation received through a route the auditor does not control, or from a jurisdiction that obstructs direct confirmation, does not weakly satisfy the precondition; it fails it, and the postcondition is unavailable. Silent conversion, in this vocabulary, is simply a postcondition violation: a procedure whose preconditions failed was nonetheless treated as having discharged its postcondition.
 
@@ -238,10 +268,14 @@ The constraint is the point. The verified target must not smuggle in its own res
 
 \begin{definition}[Residual Register]
 \label{def:register}
-Every classification other than an admitted \state{Verified} writes an entry to a residual register recording the assertion, the state assigned, the boundary evaluation that produced it, and an identified owner for the residual risk or an explicit orphan flag triggering escalation. The register is append-only with respect to workflow: no queue-clearing, phase-completion, or dashboard operation deletes or downgrades an entry.
+Every classification other than an admitted \state{Verified} writes an entry to a residual register recording the assertion, the state assigned, the identity and version of the boundary specification that produced it, the identity of the evidence context it was evaluated against, a reason distinguishing why the entry was written (not classified \state{Verified}; classified \state{Verified} but missing a certificate; classified \state{Verified} but the certificate presented was invalid), and an identified owner for the residual risk or an explicit orphan flag triggering escalation. The register is append-only: no queue-clearing, phase-completion, or dashboard operation deletes or downgrades an entry.
 \end{definition}
 
 Durability is what distinguishes a residual register from an exception log. An exception log records that something was flagged. A residual register records that something remains unestablished, and it continues to record this after the workflow that flagged it has closed.
+
+This paper makes four separate claims about the register, not one, because they are different claims about different things and conflating them was an error in an earlier presentation of this discipline. \emph{Emission}: every material dependency that is not both classified \state{Verified} and validly admitted automatically writes a matching entry -- this is a property of the classification pipeline (Section~\ref{sec:formal}), not a convention a workflow implementer is trusted to follow. \emph{Historical preservation}: an entry, once written, remains in the register's full history under every subsequent workflow operation. \emph{Open-state preservation}: the entries a given run of the pipeline produces remain exactly those entries after any further such operation -- nothing narrows what counts as the outstanding set by removing members from it. \emph{Orphan escalation}: an entry with no assigned owner is exactly what an escalation query over the register returns, not merely an entry that query happens to preserve once found. Section~\ref{sec:formal} states and proves each of these four separately.
+
+One further claim needs to be made by its absence rather than its presence. This paper's formal development does not model resolving or closing a residual: there is no state distinguishing an entry that has since been addressed from one that has not, and no certificate or event that would move an entry from open to closed. A workflow operation described informally as ``clearing the dashboard'' is representable in this development only as an operation that may append further entries; it is not representable as one that marks existing entries resolved, because no such marking exists to apply. Real audit workflows plainly do resolve residuals eventually, and a future extension of this discipline should model that explicitly, with its own certificate and its own soundness statement, rather than by weakening the append-only property this paper already has. Stating this gap here, rather than leaving a reader to infer it from what does not appear, is itself an instance of the discipline this paper argues for.
 
 \section{Composition}
 \label{sec:composition}
@@ -250,7 +284,7 @@ Audits are made of many procedures, and an opinion depends on many assertions. T
 
 \begin{rul}[Composition]
 \label{rule:composition}
-An audit opinion is admissible as unqualified only if every material assertion on which it depends is admissible. An opinion inherits the weakest unresolved material assertion on which it depends.
+An audit opinion is admissible as unqualified only if every material assertion on which it depends is admissible: a material dependency that is not both verified and validly admitted blocks an unqualified decision, regardless of how many other dependencies are fine.
 \end{rul}
 
 \begin{lstlisting}
@@ -263,7 +297,9 @@ then Opinion is inadmissible as unqualified
    or state(a) = Verified but admission was not independent *)
 \end{lstlisting}
 
-The inheritance direction matters. Strength does not propagate upward from the majority of well-verified assertions; weakness propagates upward from the single unresolved one. This is not pessimism. It is the observation that an unqualified opinion asserts a conjunction, and a conjunction is no stronger than its weakest conjunct. A methodology that averages evidence quality across assertions, or that permits a preponderance of \state{Verified} classifications to carry an \state{Undefined} one across the admissibility line, has reintroduced the implicit default at the composition layer after eliminating it at the classification layer.
+This paper and the accompanying development call this the \emph{weakest-link} rule informally, because a Boolean conjunction fails as soon as any one conjunct fails, in the same sense that a chain is no stronger than its weakest link. The name is colloquial rather than a formal claim: the composition rule is a Boolean conjunction over the \texttt{admissible} predicate (Section~\ref{sec:admissibility}), not a statement that the six states of Section~\ref{sec:states} form a total order in which one state can be compared as ``weaker'' than another in general. What the rule excludes is a specific, different failure: any construction that lets a preponderance of \state{Verified} classifications carry an \state{Undefined} or otherwise non-admissible one across the admissibility line, whether by averaging evidence quality across assertions or by any other aggregation that treats the conjunction as anything softer than exact. Such a construction would reintroduce the implicit default at the composition layer after eliminating it at the classification layer.
+
+The kernel receives the set of dependencies already judged material, individually or in aggregate, as an input; it does not itself determine accounting materiality. That determination -- which assertions are material to a given opinion, and at what threshold -- is supplied by the caller, exactly as the boundary specification and the process registry are, and Section~\ref{sec:related} and Section~\ref{sec:implications} return to what this paper does and does not claim about where that determination comes from.
 
 \section{Three Violations of the Invariant}
 \label{sec:examples}
@@ -273,7 +309,7 @@ The invariant was stated before any example, and the discipline stands whether o
 \subsection{Wirecard as a Classification Trace}
 \label{sec:wirecard}
 
-The collapse of Wirecard AG in 2020 is commonly narrated as a failure of scepticism or an achievement of fraud \citep{mccrum2022, esma2020}. Under the present discipline it is neither. It is a misclassification, and it can be exhibited as a trace.
+The collapse of Wirecard AG in 2020 is commonly narrated as a failure of scepticism or an achievement of fraud \citep{mccrum2022, esma2020}. At the classification layer isolated in this paper, the failure can instead be represented as an unresolved cash-existence assertion being permitted to support an unqualified conclusion, and it can be exhibited as a trace. The fixture below is a formalised version of the published narrative, checked in the accompanying Coq/Rocq development (Section~\ref{sec:formal}); it is not a reconstruction of Ernst \& Young's actual working papers, and every failed precondition it encodes is drawn from the same published sources cited above rather than from access to those papers.
 
 \begin{lstlisting}
 Assertion:
@@ -307,10 +343,12 @@ Violation:
 
 The claim made by this trace is deliberately narrow. The discipline would not have prevented the fraud, and it compels no particular exercise of judgement. It would have changed the classification state of assertion $A$: the evidential obstruction would have been recorded as \state{Undefined}, with a registered residual and an inadmissible unqualified opinion, rather than passing as ordinary acceptance. The jurisdictional, evidence-quality, and control-boundary failures that enabled the fraud are, in this vocabulary, three failed preconditions whose failure the legacy system did not record.
 
+The accompanying development exercises three further variations on this same assertion, not only the one above, because \state{Undefined} is only one of several ways an unqualified opinion is ruled out. With every precondition satisfied, the assertion classifies \state{Verified} -- the boundary specification is not vacuous -- but that alone is not enough: presented with no admission certificate at all, the opinion remains inadmissible for want of one; presented with a certificate in which the proposing process names itself as its own admitting verifier, the certificate is rejected by exactly the mechanism of Theorem~\ref{thm:selfadmission}, and the opinion remains inadmissible; only when a certificate from a distinct, registered verifier is presented does the opinion become admissible as unqualified. Section~\ref{sec:formal} states the outcome of all four fixtures precisely.
+
 \subsection{Continuous Auditing Queues as an Algorithm}
 \label{sec:ca}
 
-The same violation occurs at ordinary scale in continuous auditing, and there it can be written as a three-line algorithm. Suppose a monitoring system flags 10{,}000 transactions in a period and a thresholding layer routes 200 to human review. The undisciplined system runs:
+The same violation occurs at ordinary scale in continuous auditing, and there it can be written as a three-line algorithm. Suppose, hypothetically, a monitoring system flags 10{,}000 transactions in a period and a thresholding layer routes 200 to human review; the accompanying formal fixture (Section~\ref{sec:formal}) uses ten transactions and two reviewed, at a scale small enough for the proof assistant to evaluate directly, not to reproduce this ratio. The undisciplined system runs:
 
 \begin{lstlisting}
 for each exception e:
@@ -318,29 +356,24 @@ for each exception e:
         clear(e)
 \end{lstlisting}
 
-The 9{,}800 cleared exceptions are not verified; they are deprioritised. If the dashboard then reports that 200 exceptions were reviewed with no material issue found, while the 9{,}800 vanish from consequence, the system has silently converted unreviewed exceptions into accepted background. The disciplined system runs:
+The 9{,}800 cleared exceptions are not verified; they are deprioritised. If the dashboard then reports that 200 exceptions were reviewed with no material issue found, while the 9{,}800 vanish from consequence, the system has silently converted unreviewed exceptions into accepted background. The disciplined system, matching the pipeline of Section~\ref{sec:formal} rather than introducing a state that pipeline does not have, runs:
 
 \begin{lstlisting}
 for each exception e:
-    if priority(e) < threshold:
-        state(e) := Unreviewed
-        residual_register.add(e)
+    classify(e)                     -- Verified or Undefined, by construction
+    if not (classify(e) = Verified and validly_admitted(e)):
+        residual_register.add(e)    -- automatic, not a separate step
+                                        a workflow author can omit
 \end{lstlisting}
 
-with the governing inequality:
-
-\begin{lstlisting}
-Unreviewed != Accepted
-\end{lstlisting}
-
-That single line is the continuous auditing case in full. Prioritisation is legitimate; capacity is finite; triage is not the error. The error is the disappearance of the deprioritised exceptions from the record of what remains unestablished. Under the discipline they persist in the residual register, and the aggregate of such entries is itself evidence about the assurance the monitoring system actually provides, as distinct from the assurance its cleared dashboard displays \citep{alles2006, issa2016, austin2021}.
+A deprioritised transaction is not assigned a separate \state{Unreviewed} state; it remains \state{Undefined}, exactly as classification against the declared boundary computes it (Section~\ref{sec:states}), and a residual entry recording that is emitted automatically rather than by a workflow author remembering to call \texttt{residual\_register.add}. ``Clearing the dashboard'' is representable in this pipeline only as a further workflow operation that may append entries; it does not, and cannot, construct the resolution certificate that would be needed to mark an existing entry closed, because this development does not model one (Section~\ref{sec:residuals}). The governing fact is consequently not an inequality between two states but a preservation property: every residual entry the pipeline emits remains in the register after any such further operation. That single property is the continuous auditing case in full. Prioritisation is legitimate; capacity is finite; triage is not the error. The error is the disappearance of the deprioritised exceptions from the record of what remains unestablished. Under the discipline they persist in the residual register, and the aggregate of such entries is itself evidence about the assurance the monitoring system actually provides, as distinct from the assurance its cleared dashboard displays \citep{alles2006, issa2016, austin2021}.
 
 \subsection{SQL Unknown as a Semantic Error}
 \label{sec:sql}
 
-At the data layer, accounting information systems already possess the required third value. SQL evaluates comparisons involving missing data to \state{Unknown} rather than to true or false \citep{codd1979}. The database refuses to convert absence of information into an affirmative truth value.
+At the data layer, accounting information systems already possess the required third value, and three distinct things need to be kept apart here because the layer above the database routinely collapses them into one. \state{NULL} is a marker attached to a stored value, recording that no value is present; it is not itself a truth value. \state{Unknown} is the truth value SQL's three-valued comparison semantics returns when a predicate is evaluated against a \state{NULL}, standardised behaviour rather than an implementation quirk \citep{codd1979} and specified in the SQL standard itself (ISO/IEC 9075). Neither of these is the application-layer coercion that follows them: the numeric, Boolean, or string value some later layer substitutes for \state{Unknown} so that arithmetic, a conditional, or a report can proceed without a third case to handle. The database refuses to convert absence of information into an affirmative truth value; the coercion is introduced above it, by code the database's own semantics did not require.
 
-The error occurs above the database, and it is a semantic error with a precise description. The error is not that the database has an \state{Unknown} value. The error is that the surrounding system lacks the discipline to preserve it. A reporting layer that renders a null risk score as zero, a middleware coercion that aggregates a missing confirmation as no exception, and a filter predicate that silently excludes unresolved rows so that a completeness check passes are all instances of the same conversion:
+The error occurs above the database, and it is a semantic error with a precise description. The error is not that the database has an \state{Unknown} value. The error is that the surrounding system lacks the discipline to preserve it once the value leaves the database. A reporting layer that renders a null risk score as zero, a middleware coercion that aggregates a missing confirmation as no exception, and a filter predicate that silently excludes unresolved rows so that a completeness check passes are all instances of the same conversion:
 
 \begin{lstlisting}
 Unknown at the data layer
@@ -348,12 +381,159 @@ must not become
 Accepted at the audit layer
 \end{lstlisting}
 
-The database example demonstrates that the technical capacity to represent verification failure has existed for decades. What has been missing is not the third value but the discipline that preserves it through every layer standing between the evidence and the conclusion.
+The accompanying development connects this case to the same boundary machinery every other fixture in this paper uses, rather than modelling it as an isolated two-value comparison: a nullable score becomes boundary evidence, present in the context if and only if the underlying value is present, so absence classifies \state{Undefined} through exactly the mechanism of Section~\ref{sec:boundaries}, not through a special case written for this example. A general theorem in that development (Section~\ref{sec:formal}) states that absence, represented this way, cannot reach an unqualified decision under \emph{any} process registry, proposal, or admission certificate a caller might supply, not only the specific ones a demonstration happens to construct. The database example demonstrates that the technical capacity to represent verification failure has existed for decades. What has been missing is not the third value but the discipline that preserves it through every layer standing between the evidence and the conclusion.
 
-\section{Formal Sketch}
+\section{Formal Development}
 \label{sec:formal}
 
-The formalisation target is deliberately narrow and structural. The proof assistant is not verifying the audit. It is verifying the classification rule that prevents an unverifiable material assertion from being admitted as verified. Substantive testing, sampling sufficiency, valuation, and fraud detection are not formalised; the discipline constrains how their results are allowed to propagate into conclusions.
+The formalisation target is deliberately narrow and structural. The proof assistant is not verifying the audit. It is verifying an executable classification pipeline that prevents an unverifiable material assertion from being admitted as verified. Substantive testing, sampling sufficiency, valuation, and fraud detection are not formalised; the discipline constrains how their results are allowed to propagate into conclusions. This section states that pipeline precisely: its data structures, its five stages, the soundness theorem for each stage, and the end-to-end theorem composing them, in the same order the accompanying Coq/Rocq development states them.
+
+\subsection*{Data structures}
+
+\begin{lstlisting}
+EqbSpec Fact           -- an equality test carrying its own correctness
+                            proof (eqb_true_iff), not a bare function trusted
+                            by convention
+Procedure               -- id, name, preconditions, covers : Assertion -> bool
+BoundarySpec             -- id, version, list of Procedure
+ClassificationProposal   -- id, assertion, claimed classification, proposer id
+AdmissionCertificate     -- proposal id it admits, verifier id, decision bit
+DependencyPacket         -- assertion, material?, classification, proposal,
+                            certificate (option)
+ResidualEntry             -- id, assertion, state, boundary id+version,
+                            context id, reason, owner (option)
+OpinionDecision          -- Unqualified
+                          | InadmissibleOpinion (reasons : list InadmissibilityReason)
+PipelineInput             -- boundary spec, equality witness, context (+id),
+                            assertions, materiality predicate, proposal and
+                            certificate functions, process registry
+AuditDecision             -- classifications, residuals, opinion decision
+\end{lstlisting}
+
+\subsection*{The pipeline}
+
+\begin{lstlisting}
+boundary classification        classify : BoundarySpec -> EqbSpec -> context
+        |                                  -> Assertion -> EvidenceState
+classification proposal
+        |
+admission validation           validate_admission : ProcessRegistry ->
+        |                        ClassificationProposal -> AdmissionCertificate
+        |                        -> bool
+residual emission              process_dependency, classify_and_register
+        |
+opinion decision                decide_opinion : ProcessRegistry ->
+                                 list DependencyPacket -> OpinionDecision
+\end{lstlisting}
+
+\texttt{run\_pipeline} composes all five stages over one \texttt{PipelineInput} into one \texttt{AuditDecision}. Each stage below is proved sound on its own, and the end-to-end theorem is a composition of those proofs, not an independent one.
+
+\subsection*{Boundary classification}
+
+\begin{lstlisting}
+Definition classify {Fact Assertion : Type}
+    (bspec : BoundarySpec Fact Assertion) (E : EqbSpec Fact)
+    (ctx : list Fact) (a : Assertion) : EvidenceState :=
+  if procedure_satisfied E ctx a (boundary_procedures bspec)
+  then Verified else Undefined.
+
+Theorem boundary_verified_has_witness :
+  forall bspec E ctx a,
+    classify bspec E ctx a = Verified ->
+    exists p, In p (boundary_procedures bspec) /\
+              procedure_covers p a = true /\
+              has_all E ctx (procedure_preconditions p) = true.
+\end{lstlisting}
+
+\texttt{classify} is not primitive: its value is computed from the declared boundary specification and evidence context, exactly as Section~\ref{sec:boundaries} requires, and there is no third branch for it to take. \texttt{boundary\_verified\_has\_witness} is the difference between a Boolean computation and a proof about what produced it: a \state{Verified} outcome comes with a concrete procedure, drawn from the declared specification, that covers the assertion and has every precondition present in the context -- not merely that some computation happened to return \texttt{true}. A companion monotonicity theorem, \texttt{boundary\_verified\_context\_monotone}, states that adding evidence never turns a \state{Verified} classification back to \state{Undefined}.
+
+\subsection*{Admission validation}
+
+\begin{lstlisting}
+Definition validate_admission (registry : ProcessRegistry)
+    (proposal : ClassificationProposal) (cert : AdmissionCertificate) : bool :=
+  (cert names the correct proposal)
+  && (the admitting process is registered with Verifier authority)
+  && (the admitting process's identity differs from the proposer's)
+  && (admission_decision cert)
+  && (proposal_classification proposal = Verified).
+\end{lstlisting}
+
+(Set out here for readability; the accompanying development states the five conjuncts as a single Boolean expression over \texttt{ProcessRegistry}, \texttt{ClassificationProposal}, and \texttt{AdmissionCertificate}.) Each conjunct has its own rejection theorem: \texttt{certificate\_for\_wrong\_proposal\_rejected}, \texttt{non\_verifier\_certificate\_rejected}, and \texttt{proposer\_certificate\_rejected} -- the last is the mechanism inside the pipeline for what the declarative layer below states as Theorem~\ref{thm:selfadmission}. \texttt{valid\_admission\_implies\_verified} and \texttt{valid\_admission\_implies\_distinct\_process} state what a passing certificate guarantees.
+
+\subsection*{Residual emission}
+
+\begin{lstlisting}
+Definition process_dependency (registry) (boundary id, version) (context id)
+    (fresh id) (d : DependencyPacket)
+    : EvidenceState * option ResidualEntry :=
+  if dep_ok registry d                 (* Verified and validly admitted *)
+  then (dep_state d, None)
+  else (dep_state d, Some (a new ResidualEntry recording d's assertion,
+                            state, boundary provenance, and reason)).
+
+Theorem nonadmitted_material_emits_residual :
+  forall registry ids d,
+    dep_material d = true -> dep_ok registry d = false ->
+    exists e, (process_dependency ... d produces (Some e)) /\
+              residual_assertion e = dep_assertion d /\
+              residual_state e = dep_state d.
+\end{lstlisting}
+
+Four separate results, matching Section~\ref{sec:residuals}'s four separate claims: \emph{Emission} (\texttt{nonadmitted\_material\_emits\_residual} above, and its converse \texttt{admitted\_verified\_emits\_no\_open\_residual}); \emph{historical preservation} (\texttt{residual\_preservation}, \texttt{residual\_preservation\_chain}: the register's \texttt{step} relation is purely additive); \emph{open-state preservation} (\texttt{classify\_and\_register\_step}: a full pipeline run's own emitted entries extend the log, in the same sense); \emph{orphan escalation} (\texttt{orphan\_escalation\_sound}: an entry with no owner is exactly what the orphan query returns). No resolution or closure mechanism is formalised, as Section~\ref{sec:residuals} already states; there is no fifth theorem here about closing a residual because there is no closure operation to have a theorem about.
+
+\subsection*{Opinion decision}
+
+\begin{lstlisting}
+Definition decide_opinion (registry) (deps : list DependencyPacket)
+    : OpinionDecision :=
+  let material_deps := filter dep_material deps in
+  if forallb (dep_ok registry) material_deps
+  then Unqualified
+  else InadmissibleOpinion (a reason per failing dependency).
+
+Theorem decide_opinion_unqualified_sound :
+  forall registry deps,
+    decide_opinion registry deps = Unqualified ->
+    forall d, In d deps -> dep_material d = true ->
+      dep_state d = Verified /\ dep_valid_admission registry d = true.
+\end{lstlisting}
+
+This -- not the declarative predicate below -- is the theorem that now justifies ``by construction'': it is soundness of an executable function that a runtime classifier actually calls, not an unfolding of a proposition defined to already contain the desired property. Eight further theorems cover every way a dependency can block \texttt{Unqualified}: \texttt{undefined\_blocks\_unqualified}, \texttt{refuted\_blocks\_unqualified}, \texttt{presumptive\_blocks\_unqualified}, \texttt{escalation\_blocks\_unqualified}, \texttt{verified\_without\_admission\_blocks\_unqualified}, and \texttt{invalid\_admission\_blocks\_unqualified}, together with the single generic lemma, \texttt{decide\_opinion\_blocked}, they are each corollaries of. \texttt{all\_valid\_dependencies\_allow\_unqualified} is the converse, completeness direction: the check is not vacuously impossible to pass.
+
+\subsection*{The end-to-end theorem}
+
+\begin{lstlisting}
+Theorem pipeline_unqualified_sound :
+  forall inp start_id log,
+    decision_opinion (run_pipeline inp start_id log) = Unqualified ->
+    forall a, In a (pi_assertions inp) -> pi_material inp a = true ->
+      classify (pi_bspec inp) (pi_eq inp) (pi_context inp) a = Verified /\
+      dep_valid_admission (pi_registry inp) (build_packet inp a) = true.
+\end{lstlisting}
+
+Given the declared boundary specification, evidence context, assertion set, process registry, and admission certificates threaded through one \texttt{PipelineInput}, the pipeline cannot decide \texttt{Unqualified} unless every material assertion in scope is classified \state{Verified} under the declared boundary \emph{and} carries a validly admitted certificate. This is Theorem~\ref{thm:main} made executable and is the paper's central result; it is proved as a direct corollary of \texttt{decide\_opinion\_unqualified\_sound} applied to the packets \texttt{run\_pipeline} itself builds, which is the point of stating the earlier stages separately -- composition of already-proved theorems, not a new proof asked to carry the whole claim.
+
+\subsection*{The declarative layer}
+
+Alongside the executable pipeline above, the development retains a smaller, earlier declarative layer: \texttt{OpinionAdmissible}, a \texttt{Prop} defined as exactly the per-dependency admissibility check, and \texttt{default\_free\_admissibility}, which unfolds it.
+
+\begin{lstlisting}
+Theorem default_free_admissibility :
+  forall (O : Opinion),
+    OpinionAdmissible O ->
+    forall (a : Assertion),
+      In a (deps O) -> material a ->
+      state a = Verified /\ independently_admitted a.
+
+Theorem residual_preservation :
+  forall (log1 log2 : RegisterLog) (e : ResidualEntry),
+    step log1 log2 -> In e log1 -> In e log2.
+
+Theorem no_self_admission :
+  forall (p : Process) (a : Assertion),
+    proposes p a -> ~ admits p a.
+\end{lstlisting}
 
 \begin{theorem}[Default-Free Admissibility]
 \label{thm:main}
@@ -375,39 +555,30 @@ Every non-affirmative classification of a material assertion writes an entry to 
 A proposed classification cannot admit itself. Admission is performed only by a verifier independent of the process that generated the proposal.
 \end{theorem}
 
-The main theorem is stated in Coq as follows; the development extracts to an executable OCaml classifier that satisfies the theorems by construction.
+These four statements are still proved and still true; they are no longer presented as the central result, because a \texttt{Prop} defined to already contain the desired property, however genuinely proved, is a different kind of claim from soundness of a decision procedure that computes. The predicate is named \texttt{independently\_admitted} rather than \texttt{admitted} precisely because \texttt{Admitted} is a reserved proof-closing command in Coq/Rocq; naming a semantic predicate identically to that tactic is the kind of small inconsistency the discipline itself warns against, so the development avoids it throughout. \texttt{step} is the register's transition relation under any workflow operation; the theorem states that every such step is log-extending, never log-shrinking. \texttt{admits} is deliberately a relation on the process performing admission rather than on the assertion alone, so that \texttt{no\_self\_admission} cannot be discharged by a proposing process simply relabelling itself.
 
-\begin{lstlisting}
-Theorem default_free_admissibility :
-  forall (O : Opinion),
-    unqualified O ->
-    forall (a : Assertion),
-      In a (deps O) -> material a ->
-      state a = Verified /\ independently_admitted a.
-\end{lstlisting}
+The force of the pipeline theorem above lies in what it excludes: given a fixed \texttt{PipelineInput}, there is no execution of \texttt{run\_pipeline} that reaches \texttt{Unqualified} from a dependency set containing an \state{Undefined}, non-admitted, or invalidly-admitted material assertion. Whether that makes the type error of Section~\ref{sec:problem} ``unrepresentable'' depends on what is being asked to be unrepresentable. \texttt{OpinionDecision} is an ordinary data type: nothing stops a caller from constructing the value \texttt{Unqualified} directly, disconnected from any dependency check, any more than a type system stops a programmer from writing a wrong literal. What \texttt{pipeline\_unqualified\_sound} shows is narrower and is the claim this paper actually makes: no proof of admissibility is derivable, and no execution of \texttt{run\_pipeline} produces \texttt{Unqualified}, under the declared specification without satisfying the check. That is a soundness property of a function, not an unconstructibility property of a type, and this paper states it as such throughout rather than as ``unrepresentable.''
 
-The predicate is named \texttt{independently\_admitted} rather than \texttt{admitted} precisely because \texttt{Admitted} is a reserved proof-closing command in Coq/Rocq; naming a semantic predicate identically to that tactic is the kind of small inconsistency the discipline itself warns against, so the sketch avoids it throughout. The \texttt{state} function is not primitive. Its value is computed from the declared boundary specification by the precondition checks of Section~\ref{sec:boundaries}, so that verifiability is determined by declared boundaries and mechanical application, not by discretion at the point of disappointment. The force of the theorem lies in what it excludes: within the declared system there exists no derivation of an unqualified opinion from a dependency set containing an \state{Undefined} material assertion. The type error of Section~\ref{sec:problem} is not discouraged. It is unrepresentable.
+\subsection*{Proof dependencies, the trusted computing base, and extraction}
 
-The remaining two theorems admit the same treatment. Residual preservation is a monotonicity property on the register viewed as a growing log, and no-self-admission is a separation property between the process that proposes a classification and the process that admits it:
+The development's modules depend on each other in one direction only: \texttt{Base} (the state vocabulary and stable identifiers) is required by \texttt{Boundary} (classification), which together with \texttt{Base} is required by \texttt{SelfAdmission} (admission certificates); \texttt{Admissibility} (the opinion decision) requires all three; \texttt{Residual} (emission) requires \texttt{Admissibility}; \texttt{Pipeline} (composition) requires all of the above. \texttt{Cases} exercises the pipeline on the three worked examples of Section~\ref{sec:examples}, and \texttt{Extraction} compiles the \texttt{Type}/\texttt{bool}-valued decision procedures -- \texttt{classify}, \texttt{validate\_admission}, \texttt{decide\_opinion}, \texttt{process\_dependency}/\texttt{classify\_and\_register}, and \texttt{run\_pipeline} -- to OCaml. The \texttt{Prop}-valued specification predicates (\texttt{admissible}, \texttt{OpinionAdmissible}, \texttt{proposes}, \texttt{admits}, \texttt{step}) are not extracted: Coq erases \texttt{Prop} at extraction time because they carry no computational content, and that is correct here, not an omission -- they are proved about the classifier, not run by it.
 
-\begin{lstlisting}
-Theorem residual_preservation :
-  forall (log1 log2 : RegisterLog) (e : ResidualEntry),
-    step log1 log2 -> In e log1 -> In e log2.
+The trusted computing base is, accordingly: the Coq/Rocq kernel's type checker, which \texttt{coqchk} independently re-verifies against every compiled module; the extraction mechanism itself, which translates a checked \texttt{Type}/\texttt{bool}-valued term to OCaml without re-proving anything about the translation; the OCaml compiler; and the small hand-written CLI wiring that constructs \texttt{PipelineInput} values and prints whatever \texttt{run\_pipeline} returns (Section~\ref{sec:examples}'s fixtures, mirrored exactly in that CLI). None of the last three are machine-checked, exactly as with any Coq development that extracts to a general-purpose language; the regression test described below checks observed agreement between the extracted executable and the proved Examples, which is testing, not proof, and does not close that gap.
 
-Theorem no_self_admission :
-  forall (p : Process) (a : Assertion),
-    proposes p a -> ~ admits p a.
-\end{lstlisting}
+\subsection*{What is proved, computed, and merely observed}
 
-\texttt{step} is the register's transition relation under any workflow operation (queue-clearing, phase completion, dashboard refresh); the theorem states that every such step is log-extending, never log-shrinking. \texttt{admits} is deliberately a relation on the process performing admission rather than on the assertion alone, so that \texttt{no\_self\_admission} cannot be discharged by a proposing process simply relabelling itself.
+Five different kinds of claim appear in this section and it matters which is which. \emph{Definitional lemmas} (\texttt{classify\_verified\_iff}, \texttt{dep\_ok\_false\_of\_not\_verified}) unfold a definition and establish nothing beyond it. \emph{Soundness theorems} (\texttt{boundary\_verified\_has\_witness}, \texttt{decide\_opinion\_unqualified\_sound}, \texttt{pipeline\_unqualified\_sound}) say an executable function's output implies a property about its inputs. \emph{Preservation theorems} (\texttt{residual\_preservation}, \texttt{boundary\_verified\_context\_monotone}) say a property survives a transition. \emph{Executable calculations} (the worked-case Examples of Section~\ref{sec:examples}, each closed by \texttt{reflexivity} -- Coq evaluating a concrete, closed term and checking the result matches, not a general argument) are checked once, for the specific inputs given, not generalised. \emph{Regression tests} (\texttt{tools/fixture\_check.py}, comparing the extracted CLI's printed output against the same worked cases) check the compiled OCaml executable against the proved Coq Examples and can only ever find disagreement, never prove agreement holds beyond the cases it runs.
 
-\begin{remark}[On the word ``machine-checked'']
-The abstract's phrase ``machine-checked sketch'' hedges the scope of what is formalised, not the generality of what is proved. \texttt{default\_free\_admissibility}, \texttt{residual\_preservation}, and \texttt{no\_self\_admission} are proved in the accompanying development as stated above: as theorems quantified over abstract, unbounded \texttt{Assertion}/\texttt{Opinion}/\texttt{Process} types, not restricted to the finite instances exercised there, and \texttt{coqchk} confirms every module in the development is closed under the global context with no \texttt{Admitted} and no \texttt{Axiom}. The three worked cases (Wirecard, a continuous-auditing exception queue, and the SQL \state{Unknown} collapse) exercise these general theorems on finite instances; they illustrate the theorems and are not the extent of what is proved. What remains a sketch is the object of formalisation, not its rigor: the development verifies the classification rule of this section, not an audit, and the extraction to the executable OCaml classifier is, as with any Coq extraction, trusted rather than independently machine-checked.
-\end{remark}
+\subsection*{Implementation and artefact availability}
 
-\subsection*{Artifact availability}
-In keeping with this journal's emphasis on tool and proof replicability, the Coq/Rocq development and the OCaml classifier it extracts to are intended to accompany this submission as an online appendix or linked repository at the final-version stage; \emph{[repository URL to be inserted before submission]}. The evaluation results reported in Section~\ref{sec:examples} are illustrative traces rather than outputs of a run over a production dataset, and the repository README states this distinction explicitly so that reviewers do not mistake the Wirecard and continuous-auditing examples for empirical findings.
+The formal core (\texttt{Base.v} through \texttt{Pipeline.v}) is 1{,}103 non-blank lines and 33 \texttt{Theorem}/\texttt{Corollary} statements; \texttt{Cases.v} adds the three worked examples of Section~\ref{sec:examples}. Every publication-facing theorem's proof term is checked, individually, to depend on no axiom (\texttt{Print Assumptions}, \texttt{rocq/PrintAssumptions.v}: every one reports ``Closed under the global context''), in addition to \texttt{coqchk}'s independent re-verification of every compiled module and a source-level check against \texttt{Admitted}, \texttt{admit}, and \texttt{Axiom}. \texttt{make verify} runs the full sequence -- build, extraction, \texttt{coqchk}, the assumption check, the source check, and the regression test -- and is what continuous integration runs on every push and pull request. In keeping with this journal's emphasis on tool and proof replicability, the Coq/Rocq development and the OCaml classifier it extracts to accompany this submission at \url{https://github.com/dhwcmoore/partial-audit-classification}, as of commit \texttt{abb6a70} and its history; a tagged release is intended for the final-version stage. The evaluation results reported in Section~\ref{sec:examples} are illustrative traces rather than outputs of a run over a production dataset, and the repository's \texttt{NON\_CLAIMS.md} states this distinction explicitly so that reviewers do not mistake the Wirecard and continuous-auditing examples for empirical findings.
+
+\subsection*{The worked cases}
+
+Wirecard (Section~\ref{sec:wirecard}) is four fixtures over the same assertion and boundary specification, each a full \texttt{run\_pipeline} call: incomplete evidence classifies \state{Undefined}, a residual is emitted, and the decision is \texttt{InadmissibleOpinion} with reason \texttt{NotVerified}; complete evidence with no certificate presented classifies \state{Verified} but the decision is still \texttt{InadmissibleOpinion}, with reason \texttt{MissingCertificate} -- distinguished, by the reason alone, from the first fixture, exercising the two-conjunct rule of Section~\ref{sec:admissibility} directly; complete evidence with a certificate from a distinct, registered verifier decides \texttt{Unqualified}, with no residual left open; complete evidence with a certificate naming the proposer as its own verifier is rejected by \texttt{proposer\_certificate\_rejected}, and the decision is \texttt{InadmissibleOpinion} with reason \texttt{InvalidCertificate} -- Theorem~\ref{thm:selfadmission} exhibited inside the pipeline, not only at the level of the \texttt{Role} type. Continuous auditing (Section~\ref{sec:ca}) runs all ten transactions through the same pipeline; two, reviewed and admitted by a distinct verifying process, decide \state{Verified} with \texttt{dep\_ok}; the remaining eight are \state{Undefined} and each emits a residual automatically, and a further workflow \texttt{step} -- ``clearing the dashboard'' -- is proved, via \texttt{residual\_preservation}, not to remove any of the eight. SQL Unknown (Section~\ref{sec:sql}) routes score presence through \texttt{classify} like any other boundary evidence, so absence classifies \state{Undefined} by construction, and a general fixture shows absence cannot reach \texttt{Unqualified} under \emph{any} registry, proposal, or certificate a caller might supply, applying \texttt{decide\_opinion\_blocked} rather than re-deriving the fact for this case specifically.
+
+\subsection*{Note on a related submission}
+A companion manuscript, \emph{Boundary Discipline for Accounting Information Systems: On the Correct Treatment of Undefined Audit Assertions}, has been submitted to the \emph{International Journal of Digital Accounting Research}. Both manuscripts develop the same central invariant (Rule~\ref{rule:invariant}) and share the Coq/Rocq development described above. The present manuscript addresses this journal's formal-methods and tooling audience, and takes the mechanised admissibility theorem and its Coq/Rocq development as its central technical contribution. The companion manuscript instead addresses an accounting information systems audience, and develops the surrounding architecture, the Verification Balance Sheet, the Risk Assignment Register, and standards and inspection implications that are outside the scope of the present submission. This relationship is disclosed so that editors and reviewers can evaluate the degree of overlap directly; in my own assessment the two manuscripts share an invariant and a proof artefact but not a contribution, and neither manuscript's findings depend on prior acceptance of the other. The corresponding author has notified both journals' editors of the companion submission at the time of submission, consistent with each journal's policy on related or concurrent submissions.
 
 \subsection*{Note on a related submission}
 A companion manuscript, \emph{Boundary Discipline for Accounting Information Systems: On the Correct Treatment of Undefined Audit Assertions}, has been submitted to the \emph{International Journal of Digital Accounting Research}. Both manuscripts develop the same central invariant (Rule~\ref{rule:invariant}) and share the Coq/Rocq development described above. The present manuscript addresses this journal's formal-methods and tooling audience, and takes the mechanised admissibility theorem and its Coq/Rocq development as its central technical contribution. The companion manuscript instead addresses an accounting information systems audience, and develops the surrounding architecture, the Verification Balance Sheet, the Risk Assignment Register, and standards and inspection implications that are outside the scope of the present submission. We disclose the relationship so that editors and reviewers can evaluate the degree of overlap directly; in our own assessment the two manuscripts share an invariant and a proof artefact but not a contribution, and neither manuscript's findings depend on prior acceptance of the other.
@@ -415,29 +586,33 @@ A companion manuscript, \emph{Boundary Discipline for Accounting Information Sys
 \section{What Existing Literatures Supply}
 \label{sec:related}
 
-The related literatures each recognise part of the problem, and the purpose of this section is to establish exactly one claim: none of them supplies an audit-specific discipline preventing \state{Undefined} from being used as \state{Verified}. The typed state space of Section~\ref{sec:states} is, in the vocabulary of this journal's own abstract-interpretation literature, a coarse abstraction of a much richer evidential domain \citep{rustenholz2026}; the present paper does not develop that lattice-theoretic apparatus, and confines itself to the six-state abstraction of Section~\ref{sec:states} because that is the granularity at which the admissibility question of Section~\ref{sec:admissibility} is decidable by inspection.
+The related literatures each recognise part of the problem, and this section's claim is narrower than exhaustive novelty: these areas contain relevant mechanisms, individually well developed, but this paper has not found one that combines them into an audit-specific, executable classification and admission pipeline, and the literature search behind this section is not comprehensive enough to support the stronger claim that none exists. The typed state space of Section~\ref{sec:states} is, in the vocabulary of this journal's own abstract-interpretation literature, a coarse abstraction of a much richer evidential domain \citep{rustenholz2026}, in the lineage of Cousot and Cousot's lattice-theoretic semantics for approximate program properties \citep{cousot1977}; the present paper does not develop that apparatus, and confines itself to the six-state abstraction of Section~\ref{sec:states} because that is the granularity at which the admissibility question of Section~\ref{sec:admissibility} is decidable by inspection.
 
-Audit theory distinguishes what an auditor establishes from what an auditor merely fails to refute, and treats evidential sufficiency as the determinant of supportable assurance \citep{mautz1961, knechel2013, nelson2009, hurtt2010}. Its standards provide an output channel for verification failure in the modified opinion \citep{isa705}, and the empirical literature shows the channel operating under judgement and incentive rather than under any classification architecture \citep{habib2013}. The recognition is real; the enforcement is behavioural, and nothing in the classification logic makes the conversion of an unresolved assertion into an accepted one unrepresentable.
+Audit theory distinguishes what an auditor establishes from what an auditor merely fails to refute, and treats evidential sufficiency as the determinant of supportable assurance \citep{mautz1961, knechel2013, nelson2009, hurtt2010}. Its standards already state the overall objective this paper's invariant serves at the engagement level -- obtaining reasonable assurance before expressing an opinion \citep{isa200} -- and already provide the relevant vocabulary for insufficiency: ISA 500 defines audit evidence and its sufficiency and appropriateness, ISA 505 governs external confirmations (the standard direct bank confirmation in Section~\ref{sec:boundaries}'s running example falls under), and ISA 530 governs audit sampling \citep{isa500, isa505, isa530}, with the modified opinion in ISA 705 as the output channel for a failure to obtain sufficient appropriate evidence \citep{isa705}. The empirical literature shows that channel operating under judgement and incentive rather than under any classification architecture \citep{habib2013}. The recognition is real and, as Section~\ref{sec:problem} now states explicitly, this paper does not claim otherwise; the gap is that nothing in the classification \emph{logic} surrounding these standards forces the non-affirmative channel to be taken rather than silently bypassed at the point a workflow needs a binary output.
 
-Accounting information systems research supplies continuous monitoring, exception processing, and analytics \citep{vasarhelyi1991, kogan1999, alles2006, austin2021}, and it documents the workflow conditions under which deprioritised exceptions are operationally absorbed \citep{issa2016}. It lacks a state in which an unreviewed exception durably remains unreviewed after the dashboard has been cleared.
+Accounting information systems research supplies continuous monitoring, exception processing, and analytics \citep{vasarhelyi1991, kogan1999, alles2006, austin2021}, and it documents the workflow conditions under which deprioritised exceptions are operationally absorbed \citep{issa2016}. It lacks a state in which a deprioritised exception durably remains unresolved after the dashboard has been cleared.
 
-Database theory supplies the third value itself \citep{codd1979} and preserves it at the data layer, but permits every layer above to destroy it. Runtime verification supplies multi-valued verdicts over incomplete observations, with inconclusive as a first-class outcome and presumptive refinements that guide without binding \citep{bauer2011, bauer2010, leucker2009}, but this machinery has not been applied to audit evidence. Recent work on quantitative robustness for temporal specifications continues this line by replacing a binary verdict with a graded distance to the satisfaction boundary \citep{rino2026}; that measure is a refinement of the \emph{qualitative} verdict, useful for triage in exactly the sense Section~\ref{sec:admissibility} grants to presumptive states, and it is not itself an admissibility criterion, which is the distinction this paper insists on.
+Formal semantics supplies the underlying machinery for partiality itself. Kleene's strong three-valued logic gives a truth-functional account of an undetermined value propagating through composition \citep{kleene1952}, and Belnap's four-valued logic separates \emph{unknown} from \emph{contradictory} as distinct non-classical values rather than collapsing both to one \citep{belnap1977}; the six-state vocabulary of Section~\ref{sec:states} is coarser than either and is not offered as a refinement of them, but the propagation discipline of Section~\ref{sec:composition} is the same kind of claim they make formal. Scott's domain-theoretic treatment of partial functions via a lifted, ordered value space is the classical semantic account of exactly the totalisation Section~\ref{sec:problem} describes informally \citep{scott1970}; option and result types in modern programming languages are its engineering descendants, and this paper's \state{Undefined} plays the same structural role their \texttt{None}/\texttt{Nothing} constructor does, made audit-specific. Hoare's axiomatic treatment of program correctness supplies the precondition/postcondition vocabulary Section~\ref{sec:boundaries} borrows directly \citep{hoare1969}, and design-by-contract practice built on it is the closest existing discipline to this paper's verification-procedure obligations -- applied there to program correctness, not to audit evidence. Proof-carrying code establishes that a producer can attach a checkable certificate to a claim so that a consumer need not trust the producer, only verify the certificate \citep{necula1997}; this paper's admission certificates (Section~\ref{sec:admissibility}) are a narrower, audit-specific instance of the same idea, checked against a declared registry rather than against a general-purpose verification condition. Separation-of-duty models in computer security formalise the requirement that no single actor complete a sensitive transaction alone \citep{clarkwilson1987}; \texttt{validate\_admission}'s distinct-identity requirement (Section~\ref{sec:formal}) is the same requirement, specialised to classification and admission rather than to a well-formed transaction in general, and inherits the same limitation: it separates roles within a declared system, not organisational independence outside it.
 
-Each literature holds a piece. The discipline of this paper is the piece none of them holds: a typed classification of audit assertions in which \state{Undefined} is preserved from the point of verification failure through composition to audit consequence, and in which the admissibility of the conclusion is machine-checkable.
+Database theory supplies the third value itself \citep{codd1979} and preserves it at the data layer, but permits every layer above to destroy it. Runtime verification supplies multi-valued verdicts over incomplete observations -- a monitor rendering a verdict on a finite trace before the full, possibly infinite, behaviour is known -- with inconclusive as a first-class outcome and presumptive refinements that guide without binding \citep{bauer2011, bauer2010, leucker2009}, but this machinery has not been applied to audit evidence. Recent work on quantitative robustness for temporal specifications continues this line by replacing a binary verdict with a graded distance to the satisfaction boundary \citep{rino2026}; that measure is a refinement of the \emph{qualitative} verdict, useful for triage in exactly the sense Section~\ref{sec:admissibility} grants to presumptive states, and it is not itself an admissibility criterion, which is the distinction this paper insists on.
+
+Each literature holds a piece, and none of the pieces above is this paper's contribution by itself. What this paper adds is the combination: a typed classification of audit assertions in which \state{Undefined} is preserved from the point of verification failure through composition to audit consequence by an executable, machine-checked pipeline, with certificate-based admission and automatic residual emission as load-bearing parts of that pipeline rather than separate concerns.
 
 \section{Implications}
 \label{sec:implications}
 
-For accounting information systems, the discipline is an architecture: claim packets carrying assertions and evidence, boundary specifications as versioned data, a classification function returning the typed states of Section~\ref{sec:states}, an admission verifier separated from every proposing process, and an append-only residual register. The architecture is fail-closed: an assertion for which no declared procedure's preconditions hold cannot reach an affirmative state by any path.
+For accounting information systems, the discipline is an architecture: claim packets carrying assertions and evidence, boundary specifications as versioned data, a classification function returning the typed states of Section~\ref{sec:states}, admission certificates checked against a declared process registry rather than an admission verifier merely separated by convention, and an append-only residual register. The architecture is fail-closed: an assertion for which no declared procedure's preconditions hold cannot reach an affirmative state by any path. Nothing in this architecture authenticates the evidence a procedure receives, determines the materiality threshold at which an assertion becomes subject to it, or removes the professional judgement that sets both; it constrains how the judgements that are declared are permitted to propagate into a conclusion, and no further.
 
-For standards and inspection, the discipline yields measurable indicators rather than declared policy: the fraction of material assertions falling within declared boundaries, the materiality resting in regions whose correct classification is \state{Undefined}, and the fraction of residuals with an identified owner. A standard could require the declarations and the register; an inspection could measure the indicators; illustrative requirement language is confined to Appendix~\ref{app:requirements}, because standards are administration and the contribution of this paper is the discipline. Once residuals are explicit they can also be priced, insured, or disclosed, but pricing is a consequence of the discipline, not a component of it.
+For standards and inspection, the discipline yields measurable indicators rather than declared policy: the fraction of material assertions falling within declared boundaries, the materiality resting in regions whose correct classification is \state{Undefined}, and the fraction of residuals with an identified owner. A standard could require the declarations and the register; an inspection could measure the indicators; illustrative requirement language is confined to Appendix~\ref{app:requirements}, offered as illustrative consequences of the model rather than proposed regulatory text, because standards are administration and the contribution of this paper is the discipline. Nothing in this paper constitutes such a standard, establishes legal sufficiency of an opinion produced under it, or reflects adoption by any auditing body, standard-setter, or regulator; the appendix states requirements a standard \emph{could} impose, not one that does. Once residuals are explicit they can also be priced, insured, or disclosed, but pricing is a consequence of the discipline, not a component of it.
 
-For AI-assisted audit tools, the discipline becomes more urgent without becoming different. A generated conclusion is a proposed classification. Under Theorem~\ref{thm:selfadmission} it cannot admit itself, and under Rule~\ref{rule:invariant} it cannot bind consequence until an independent verifier classifies it \state{Verified} within a declared boundary. This is not a hypothetical caution: a recent benchmark of large language models on semantic-equivalence judgments over short code samples found substantial misclassification rates even with supporting context \citep{laneve2026}, which is exactly the failure mode Theorem~\ref{thm:selfadmission} is positioned against if a model's own output were permitted to double as its admission. The treatment of generation as proposal requiring admission is the entire extension, and its development belongs to separate work.
+For AI-assisted audit tools, the discipline becomes more urgent without becoming different. A generated conclusion is a proposed classification. Under Theorem~\ref{thm:selfadmission} it cannot admit itself, and under Rule~\ref{rule:invariant} it cannot bind consequence until an independent verifier, registered and distinct from the generating process, admits it \state{Verified} within a declared boundary via the certificate mechanism of Section~\ref{sec:formal}. This is not a hypothetical caution: a recent benchmark of large language models on semantic-equivalence judgments over short code samples found substantial misclassification rates even with supporting context \citep{laneve2026}, which is exactly the failure mode Theorem~\ref{thm:selfadmission} is positioned against if a model's own output were permitted to double as its admission. The treatment of generation as proposal requiring admission is the entire extension, and its development belongs to separate work.
 
 \section{Conclusion}
 \label{sec:conclusion}
 
-No method prevents fraud. The object of this method is not to make fraud impossible. It is to make the acceptance of unverifiable assertions impossible within the declared classification system. The audit classifier of this paper cannot honestly record an unverifiable material assertion as verified: the state space contains \state{Undefined}, the boundary specification computes it, the residual register preserves it, the composition rule propagates it, and the admissibility theorem excludes any unqualified conclusion that depends on it. What has been verified is exactly what the balance sheet's Target line states, nothing more, and what has not been verified is registered rather than erased. An audit system built to this discipline is humbler than its predecessors in precisely one respect: it knows when it is not entitled to speak.
+No method prevents fraud. The object of this method is not to make fraud impossible. It is narrower, and it is what this paper has actually shown: given the declared boundary specification, evidence context, material dependency set, process registry, and admission certificates supplied to it, the extracted decision procedure of Section~\ref{sec:formal} cannot return \texttt{Unqualified} unless every material dependency is classified \state{Verified} \emph{and} carries a valid admission certificate; every other material result generates a durable residual entry that no subsequent workflow operation removes.
+
+That claim is exactly as narrow as its premises. This paper does not establish that the evidence supplied to a boundary procedure is genuine, that a materiality threshold declared to the kernel is the correct one, that two distinct registered process identities are free of collusion or organisational dependence, or that the extraction from a checked Coq proof to a running OCaml executable is itself machine-checked rather than trusted in the ordinary way any compiled artefact is trusted. What has been verified is exactly what each procedure's postcondition states, nothing more; what has not been verified is registered rather than erased; and what admits a conclusion is a certificate checked against a declared registry, not a role asserted at the point of convenience. An audit system built to this discipline is humbler than its predecessors in precisely one respect: it knows when it is not entitled to speak, and it says so in a form a machine can check.
 
 \begin{thebibliography}{99}
 
@@ -461,10 +636,33 @@ Bauer, A., Leucker, M., and Schallhart, C. (2011).
 Runtime verification for LTL and TLTL.
 \emph{ACM Transactions on Software Engineering and Methodology}, 20(4), Article 14. \url{https://doi.org/10.1145/2000799.2000800}
 
+% NOTE: the six new bibitems below (Belnap, Clark and Wilson, Cousot and
+% Cousot, Hoare, Kleene, Necula, Scott) and the three new IAASB standards
+% (ISA 200, 500, 505, 530) were added to broaden Section~\ref{sec:related}.
+% Author names, years, and venues are believed correct from established
+% knowledge of these canonical references, but DOIs were not independently
+% re-verified against a live database when added; confirm each before
+% submission rather than trusting this comment.
+
+\bibitem[Belnap(1977)]{belnap1977}
+Belnap, N.~D. (1977).
+A useful four-valued logic.
+In J.~M. Dunn and G.~Epstein (Eds.), \emph{Modern Uses of Multiple-Valued Logic}, 5--37. Dordrecht: Reidel. \url{https://doi.org/10.1007/978-94-010-1161-7_2}
+
+\bibitem[Clark and Wilson(1987)]{clarkwilson1987}
+Clark, D.~D. and Wilson, D.~R. (1987).
+A comparison of commercial and military computer security policies.
+In \emph{Proceedings of the 1987 IEEE Symposium on Security and Privacy}, 184--194. \url{https://doi.org/10.1109/SP.1987.10001}
+
 \bibitem[Codd(1979)]{codd1979}
 Codd, E.~F. (1979).
 Extending the database relational model to capture more meaning.
 \emph{ACM Transactions on Database Systems}, 4(4), 397--434. \url{https://doi.org/10.1145/320107.320109}
+
+\bibitem[Cousot and Cousot(1977)]{cousot1977}
+Cousot, P. and Cousot, R. (1977).
+Abstract interpretation: A unified lattice model for static analysis of programs by construction or approximation of fixpoints.
+In \emph{Proceedings of the 4th ACM SIGACT-SIGPLAN Symposium on Principles of Programming Languages (POPL)}, 238--252. \url{https://doi.org/10.1145/512950.512973}
 
 \bibitem[ESMA(2020)]{esma2020}
 European Securities and Markets Authority (2020).
@@ -476,10 +674,35 @@ Habib, A. (2013).
 A meta-analysis of the determinants of modified audit opinion decisions.
 \emph{Managerial Auditing Journal}, 28(3), 184--216. \url{https://doi.org/10.1108/02686901311304349}
 
+\bibitem[Hoare(1969)]{hoare1969}
+Hoare, C.~A.~R. (1969).
+An axiomatic basis for computer programming.
+\emph{Communications of the ACM}, 12(10), 576--580. \url{https://doi.org/10.1145/363235.363259}
+
 \bibitem[Hurtt(2010)]{hurtt2010}
 Hurtt, R.~K. (2010).
 Development of a scale to measure professional skepticism.
 \emph{Auditing: A Journal of Practice \& Theory}, 29(1), 149--171. \url{https://doi.org/10.2308/aud.2010.29.1.149}
+
+\bibitem[IAASB, ISA 200(2016)]{isa200}
+International Auditing and Assurance Standards Board (2016).
+\emph{International Standard on Auditing 200 (Revised and Redrafted): Overall Objectives of the Independent Auditor and the Conduct of an Audit in Accordance with International Standards on Auditing}.
+New York: IFAC. No DOI assigned.
+
+\bibitem[IAASB, ISA 500(2016)]{isa500}
+International Auditing and Assurance Standards Board (2016).
+\emph{International Standard on Auditing 500 (Redrafted): Audit Evidence}.
+New York: IFAC. No DOI assigned.
+
+\bibitem[IAASB, ISA 505(2016)]{isa505}
+International Auditing and Assurance Standards Board (2016).
+\emph{International Standard on Auditing 505 (Redrafted): External Confirmations}.
+New York: IFAC. No DOI assigned.
+
+\bibitem[IAASB, ISA 530(2016)]{isa530}
+International Auditing and Assurance Standards Board (2016).
+\emph{International Standard on Auditing 530 (Redrafted): Audit Sampling}.
+New York: IFAC. No DOI assigned.
 
 \bibitem[IAASB(2016)]{isa705}
 International Auditing and Assurance Standards Board (2016).
@@ -490,6 +713,11 @@ New York: IFAC. No DOI assigned.
 Issa, H. and Kogan, A. (2014).
 A predictive ordered logistic regression model as a tool for quality review of control risk assessments.
 \emph{Journal of Information Systems}, 28(2), 209--229. \url{https://doi.org/10.2308/isys-50808}
+
+\bibitem[Kleene(1952)]{kleene1952}
+Kleene, S.~C. (1952).
+\emph{Introduction to Metamathematics}.
+Amsterdam: North-Holland. No DOI assigned.
 
 \bibitem[Knechel et al.(2013)]{knechel2013}
 Knechel, W.~R., Krishnan, G.~V., Pevzner, M., Shefchik, L.~B., and Velury, U.~K. (2013).
@@ -521,6 +749,11 @@ McCrum, D. (2022).
 \emph{Money Men: A Hot Startup, a Billion Dollar Fraud, a Fight for the Truth}.
 London: Bantam Press.
 
+\bibitem[Necula(1997)]{necula1997}
+Necula, G.~C. (1997).
+Proof-carrying code.
+In \emph{Proceedings of the 24th ACM SIGPLAN-SIGACT Symposium on Principles of Programming Languages (POPL)}, 106--119. \url{https://doi.org/10.1145/263699.263712}
+
 \bibitem[Nelson(2009)]{nelson2009}
 Nelson, M.~W. (2009).
 A model and literature review of professional skepticism in auditing.
@@ -535,6 +768,11 @@ Efficiently computable temporal robustness for a practical STL fragment.
 Rustenholz, L., Lopez-Garcia, P., and Hermenegildo, M.~V. (2026).
 Abstractions of sequences, functions and operators.
 \emph{International Journal on Software Tools for Technology Transfer}, 28, 277--301. \url{https://doi.org/10.1007/s10009-026-00843-3}
+
+\bibitem[Scott(1970)]{scott1970}
+Scott, D. (1970).
+Outline of a mathematical theory of computation.
+Technical Monograph PRG-2, Oxford University Computing Laboratory, Programming Research Group. No DOI assigned.
 
 \bibitem[Vasarhelyi and Halper(1991)]{vasarhelyi1991}
 Vasarhelyi, M.~A. and Halper, F.~B. (1991).
