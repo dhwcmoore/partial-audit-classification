@@ -25,3 +25,14 @@ _build/
 # editor / OS
 .DS_Store
 *.swp
+
+# LaTeX build artifacts (docs/*.pdf is tracked; these are not)
+docs/*.aux
+docs/*.log
+docs/*.out
+docs/*.bbl
+docs/*.blg
+docs/*.toc
+docs/*.fls
+docs/*.fdb_latexmk
+docs/*.synctex.gz
