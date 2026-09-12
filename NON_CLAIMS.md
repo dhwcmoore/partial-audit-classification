@@ -5,6 +5,39 @@ both accompanying manuscripts, "A Discipline of Partial Audit Classification"
 (submitted, STTT) and "Boundary Discipline for Accounting Information
 Systems" (submitted, IJDAR).
 
+## v0.2 scope (frozen before implementation)
+
+This section states the target claim for v0.2 before any proof in this
+repository was changed to reach it, so that the implementation is built to
+a fixed specification rather than the specification being written to match
+whatever the implementation ended up proving.
+
+> The kernel computes classifications from declared boundaries, requires a
+> distinct admission certificate before a verified classification may
+> support an unqualified opinion, automatically records every material
+> result that is not both verified and validly admitted, and prevents the
+> extracted decision procedure from returning an unqualified opinion when
+> any required certificate is absent.
+
+This is stronger than the v0.1 claim below because it concerns a
+computational decision procedure (`decide_opinion` / `run_pipeline`), not
+only a declarative predicate (`OpinionAdmissible`) defined to contain the
+desired property by construction.
+
+v0.2 continues to not claim:
+
+- that supplied evidence is genuine;
+- that supplied materiality judgements are correct;
+- that different process identifiers guarantee organisational independence;
+- that collusion is prevented;
+- that the classifier performs an audit;
+- that the Wirecard fixture reconstructs EY's working papers;
+- that OCaml extraction and compilation are inside the Rocq trusted proof
+  boundary.
+
+The rest of this document describes what v0.1 already established (still
+true) and, as later sections are added, what v0.2 adds on top of it.
+
 ## What is proved
 
 `rocq/Admissibility.v`, `rocq/Residual.v`, and `rocq/SelfAdmission.v` prove

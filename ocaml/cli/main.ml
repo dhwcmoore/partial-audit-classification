@@ -2,7 +2,7 @@
    accompanying papers (Wirecard, continuous auditing, SQL Unknown)
    against the Coq-extracted classifier in [Audit_kernel]. This is the
    "executable OCaml classifier" referred to in both manuscripts:
-   [Audit_kernel.boundary_state] is not a reimplementation of the Coq
+   [Audit_kernel.classify] is not a reimplementation of the Coq
    development, it *is* the Coq development, compiled. The case data
    below mirrors rocq/Cases.v exactly; see NON_CLAIMS.md for what
    running this does and does not establish. *)
@@ -35,14 +35,16 @@ type wassertion = CashExistencePhilippineTrustee
 let wfeq (x : wfact) (y : wfact) = x = y
 
 let direct_bank_confirmation : (wfact, wassertion) procedure =
-  { proc_name = ostring "Direct bank confirmation";
-    proc_preconditions =
+  { procedure_id = 0;
+    procedure_name = ostring "Direct bank confirmation";
+    procedure_preconditions =
       [ BankExistsIndependent; ConfirmationRouteControlledByAuditor;
         JurisdictionPermitsDirectConfirmation; AccountIdentifierSupplied;
         AuthenticatedChannel ];
-    proc_covers = (fun _ -> true) }
+    procedure_covers = (fun _ -> true) }
 
-let wirecard_boundary : (wfact, wassertion) boundarySpec = [ direct_bank_confirmation ]
+let wirecard_boundary : (wfact, wassertion) boundarySpec =
+  { boundary_id = 0; boundary_version = 1; boundary_procedures = [ direct_bank_confirmation ] }
 
 let wirecard_observed : wfact list = [ BankExistsIndependent; AccountIdentifierSupplied ]
 let wirecard_full      : wfact list =
@@ -54,9 +56,9 @@ let run_wirecard () =
   print_endline "Case 1: Wirecard cash-existence assertion (Section 7.1 / Section 7)";
   rule 70;
   let observed_state =
-    boundary_state wfeq wirecard_observed CashExistencePhilippineTrustee wirecard_boundary in
+    classify wirecard_boundary wfeq wirecard_observed CashExistencePhilippineTrustee in
   let full_state =
-    boundary_state wfeq wirecard_full CashExistencePhilippineTrustee wirecard_boundary in
+    classify wirecard_boundary wfeq wirecard_full CashExistencePhilippineTrustee in
   Printf.printf "  Assertion:            EUR 1.9bn held in Philippine trustee accounts\n";
   Printf.printf "  Observed evidence:    bank exists, account identifier supplied only\n";
   Printf.printf "  Classification:       %s\n" (string_of_state observed_state);
@@ -74,19 +76,20 @@ type caassertion = Txn of int
 let cafeq (x : cafact) (y : cafact) = x = y
 
 let proc_for (n : int) : (cafact, caassertion) procedure =
-  { proc_name = ostring "Human review";
-    proc_preconditions = [ ReviewedByAnalyst n ];
-    proc_covers = (fun a -> match a with Txn m -> m = n) }
+  { procedure_id = n;
+    procedure_name = ostring "Human review";
+    procedure_preconditions = [ ReviewedByAnalyst n ];
+    procedure_covers = (fun a -> match a with Txn m -> m = n) }
 
 let ca_boundary : (cafact, caassertion) boundarySpec =
-  List.init 10 proc_for
+  { boundary_id = 1; boundary_version = 1; boundary_procedures = List.init 10 proc_for }
 
 let ca_observed : cafact list = [ ReviewedByAnalyst 0; ReviewedByAnalyst 1 ]
 
 let run_continuous_auditing () =
   print_endline "Case 2: Continuous auditing exception queue (Section 7.2 / Section 8)";
   rule 70;
-  let states = List.init 10 (fun n -> (n, boundary_state cafeq ca_observed (Txn n) ca_boundary)) in
+  let states = List.init 10 (fun n -> (n, classify ca_boundary cafeq ca_observed (Txn n))) in
   let residuals =
     List.filter_map
       (fun (n, s) -> if s = Verified then None

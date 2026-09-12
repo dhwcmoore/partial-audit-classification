@@ -20,51 +20,63 @@ Require Import PAC.Boundary.
     bypasses the per-assertion check. The non-trivial content is in the
     Corollary, which is what a reviewer would actually want to see: a
     single Undefined material dependency is enough to rule out
-    admissibility, however many other dependencies are Verified. *)
+    admissibility, however many other dependencies are Verified.
+
+    v0.2 status: this module is carried over from v0.1 with only the
+    mechanical updates needed to compile against the v0.2 [Boundary.v]
+    API ([EqbSpec] instead of a bare equality function; [classify]
+    instead of [boundary_state]). [independently_admitted] here is
+    still the abstract, caller-supplied predicate from v0.1. The
+    certificate-based replacement for it -- [valid_admission] against a
+    [ProcessRegistry], with [decide_opinion] as the executable decision
+    procedure this predicate only specifies -- is added in
+    Pipeline.v/SelfAdmission.v; [default_free_admissibility] below
+    remains a valid, but no longer central, specification lemma once
+    that lands. See NON_CLAIMS.md. *)
 
 Record Opinion (Assertion : Type) := mkOpinion { op_deps : list Assertion }.
 Arguments mkOpinion {Assertion} _.
 Arguments op_deps {Assertion} _.
 
 Definition admissible {Fact Assertion : Type}
-    (feq : Fact -> Fact -> bool)
+    (bspec : BoundarySpec Fact Assertion) (E : EqbSpec Fact)
     (independently_admitted : Assertion -> Prop)
-    (ctx : list Fact) (bspec : BoundarySpec Fact Assertion) (a : Assertion) : Prop :=
-  boundary_state feq ctx a bspec = Verified /\ independently_admitted a.
+    (ctx : list Fact) (a : Assertion) : Prop :=
+  classify bspec E ctx a = Verified /\ independently_admitted a.
 
 Definition OpinionAdmissible {Fact Assertion : Type}
-    (feq : Fact -> Fact -> bool)
+    (bspec : BoundarySpec Fact Assertion) (E : EqbSpec Fact)
     (material : Assertion -> bool)
     (independently_admitted : Assertion -> Prop)
-    (ctx : list Fact) (bspec : BoundarySpec Fact Assertion) (o : Opinion Assertion) : Prop :=
+    (ctx : list Fact) (o : Opinion Assertion) : Prop :=
   forall a, In a (op_deps o) -> material a = true ->
-    admissible feq independently_admitted ctx bspec a.
+    admissible bspec E independently_admitted ctx a.
 
 Theorem default_free_admissibility :
   forall {Fact Assertion : Type}
-    (feq : Fact -> Fact -> bool)
+    (bspec : BoundarySpec Fact Assertion) (E : EqbSpec Fact)
     (material : Assertion -> bool)
     (independently_admitted : Assertion -> Prop)
-    (ctx : list Fact) (bspec : BoundarySpec Fact Assertion) (o : Opinion Assertion),
-    OpinionAdmissible feq material independently_admitted ctx bspec o ->
+    (ctx : list Fact) (o : Opinion Assertion),
+    OpinionAdmissible bspec E material independently_admitted ctx o ->
     forall a, In a (op_deps o) -> material a = true ->
-      boundary_state feq ctx a bspec = Verified /\ independently_admitted a.
+      classify bspec E ctx a = Verified /\ independently_admitted a.
 Proof.
-  intros Fact Assertion feq material independently_admitted ctx bspec o Hop a Hin Hmat.
+  intros Fact Assertion bspec E material independently_admitted ctx o Hop a Hin Hmat.
   exact (Hop a Hin Hmat).
 Qed.
 
 Corollary contrapositive_inadmissible :
   forall {Fact Assertion : Type}
-    (feq : Fact -> Fact -> bool)
+    (bspec : BoundarySpec Fact Assertion) (E : EqbSpec Fact)
     (material : Assertion -> bool)
     (independently_admitted : Assertion -> Prop)
-    (ctx : list Fact) (bspec : BoundarySpec Fact Assertion) (o : Opinion Assertion) (a : Assertion),
+    (ctx : list Fact) (o : Opinion Assertion) (a : Assertion),
     In a (op_deps o) -> material a = true ->
-    boundary_state feq ctx a bspec = Undefined ->
-    ~ OpinionAdmissible feq material independently_admitted ctx bspec o.
+    classify bspec E ctx a = Undefined ->
+    ~ OpinionAdmissible bspec E material independently_admitted ctx o.
 Proof.
-  intros Fact Assertion feq material independently_admitted ctx bspec o a Hin Hmat Hundef Hop.
+  intros Fact Assertion bspec E material independently_admitted ctx o a Hin Hmat Hundef Hop.
   destruct (Hop a Hin Hmat) as [Hst _].
   rewrite Hst in Hundef; discriminate.
 Qed.
@@ -77,19 +89,19 @@ Qed.
     Section 5.4 (AIS). *)
 Corollary composition_weakest_link :
   forall {Fact Assertion : Type}
-    (feq : Fact -> Fact -> bool)
+    (bspec : BoundarySpec Fact Assertion) (E : EqbSpec Fact)
     (material : Assertion -> bool)
     (independently_admitted : Assertion -> Prop)
-    (ctx : list Fact) (bspec : BoundarySpec Fact Assertion)
+    (ctx : list Fact)
     (a_good a_bad : Assertion),
     material a_good = true -> material a_bad = true ->
-    boundary_state feq ctx a_good bspec = Verified ->
+    classify bspec E ctx a_good = Verified ->
     independently_admitted a_good ->
-    boundary_state feq ctx a_bad bspec = Undefined ->
-    ~ OpinionAdmissible feq material independently_admitted ctx bspec
+    classify bspec E ctx a_bad = Undefined ->
+    ~ OpinionAdmissible bspec E material independently_admitted ctx
         (mkOpinion [a_good; a_bad]).
 Proof.
-  intros Fact Assertion feq material independently_admitted ctx bspec a_good a_bad
+  intros Fact Assertion bspec E material independently_admitted ctx a_good a_bad
     Hmg Hmb Hgood_state Hgood_adm Hbad_undef.
   eapply contrapositive_inadmissible with (a := a_bad).
   - simpl. right. left. reflexivity.

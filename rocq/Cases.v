@@ -39,16 +39,26 @@ Module Wirecard.
     | _, _ => false
     end.
 
+  Lemma wfeq_true_iff : forall x y, wfeq x y = true <-> x = y.
+  Proof.
+    intros x y; split; intro H.
+    - destruct x, y; simpl in H; try congruence.
+    - subst; destruct y; reflexivity.
+  Qed.
+
+  Definition WFactEq : EqbSpec WFact := mkEqbSpec wfeq wfeq_true_iff.
+
   Inductive WAssertion := CashExistencePhilippineTrustee.
 
   Definition direct_bank_confirmation : Procedure WFact WAssertion :=
-    mkProcedure "Direct bank confirmation"
+    mkProcedure 0 "Direct bank confirmation"
       [BankExistsIndependent; ConfirmationRouteControlledByAuditor;
        JurisdictionPermitsDirectConfirmation; AccountIdentifierSupplied;
        AuthenticatedChannel]
       (fun _ => true).
 
-  Definition boundary : BoundarySpec WFact WAssertion := [direct_bank_confirmation].
+  Definition boundary : BoundarySpec WFact WAssertion :=
+    mkBoundarySpec 0 1 [direct_bank_confirmation].
 
   (** Observed evidence per Section 7.1: an independent bank exists and
       an account identifier was supplied, but the confirmation route was
@@ -59,7 +69,7 @@ Module Wirecard.
     [BankExistsIndependent; AccountIdentifierSupplied].
 
   Example wirecard_state_undefined :
-    boundary_state wfeq observed_evidence CashExistencePhilippineTrustee boundary = Undefined.
+    classify boundary WFactEq observed_evidence CashExistencePhilippineTrustee = Undefined.
   Proof. reflexivity. Qed.
 
   Definition material_all (_ : WAssertion) : bool := true.
@@ -68,7 +78,7 @@ Module Wirecard.
   Definition wirecard_opinion : Opinion WAssertion := mkOpinion [CashExistencePhilippineTrustee].
 
   Example wirecard_opinion_inadmissible :
-    ~ OpinionAdmissible wfeq material_all no_admissions observed_evidence boundary wirecard_opinion.
+    ~ OpinionAdmissible boundary WFactEq material_all no_admissions observed_evidence wirecard_opinion.
   Proof.
     eapply contrapositive_inadmissible with (a := CashExistencePhilippineTrustee).
     - simpl. left. reflexivity.
@@ -87,7 +97,7 @@ Module Wirecard.
      AuthenticatedChannel].
 
   Example wirecard_state_verified_with_full_evidence :
-    boundary_state wfeq full_evidence CashExistencePhilippineTrustee boundary = Verified.
+    classify boundary WFactEq full_evidence CashExistencePhilippineTrustee = Verified.
   Proof. reflexivity. Qed.
 
 End Wirecard.
@@ -107,28 +117,38 @@ Module ContinuousAuditing.
   Definition cafeq (x y : CAFact) : bool :=
     match x, y with ReviewedByAnalyst n, ReviewedByAnalyst m => Nat.eqb n m end.
 
+  Lemma cafeq_true_iff : forall x y, cafeq x y = true <-> x = y.
+  Proof.
+    intros [n] [m]; simpl; split; intro H.
+    - f_equal. apply Nat.eqb_eq. exact H.
+    - apply Nat.eqb_eq. congruence.
+  Qed.
+
+  Definition CAFactEq : EqbSpec CAFact := mkEqbSpec cafeq cafeq_true_iff.
+
   (** Each transaction gets its own single-precondition procedure,
       "reviewed by an analyst for this transaction", rather than one
       generic procedure shared across all ten: this keeps has_all
       honest about what was actually checked for which transaction. *)
   Definition proc_for (n : nat) : Procedure CAFact CAAssertion :=
-    mkProcedure "Human review" [ReviewedByAnalyst n]
+    mkProcedure n "Human review" [ReviewedByAnalyst n]
       (fun a => match a with Txn m => Nat.eqb n m end).
 
-  Definition boundary : BoundarySpec CAFact CAAssertion := map proc_for (seq 0 10).
+  Definition boundary : BoundarySpec CAFact CAAssertion :=
+    mkBoundarySpec 1 1 (map proc_for (seq 0 10)).
 
   (** Transactions 0 and 1 were reviewed; 2 through 9 were deprioritised
       by the thresholding layer, exactly as in Section 7.2's
       three-line algorithm. *)
   Definition observed_evidence : list CAFact := [ReviewedByAnalyst 0; ReviewedByAnalyst 1].
 
-  Example txn0_verified : boundary_state cafeq observed_evidence (Txn 0) boundary = Verified.
+  Example txn0_verified : classify boundary CAFactEq observed_evidence (Txn 0) = Verified.
   Proof. reflexivity. Qed.
 
-  Example txn1_verified : boundary_state cafeq observed_evidence (Txn 1) boundary = Verified.
+  Example txn1_verified : classify boundary CAFactEq observed_evidence (Txn 1) = Verified.
   Proof. reflexivity. Qed.
 
-  Example txn5_undefined : boundary_state cafeq observed_evidence (Txn 5) boundary = Undefined.
+  Example txn5_undefined : classify boundary CAFactEq observed_evidence (Txn 5) = Undefined.
   Proof. reflexivity. Qed.
 
   (** The disciplined algorithm of Section 7.2: every non-Verified
@@ -137,7 +157,7 @@ Module ContinuousAuditing.
       the governing inequality "Unreviewed != Accepted" is
       [no_residual_is_verified] below. *)
   Definition undefined_txns : list nat :=
-    filter (fun n => match boundary_state cafeq observed_evidence (Txn n) boundary with
+    filter (fun n => match classify boundary CAFactEq observed_evidence (Txn n) with
                       | Verified => false
                       | _ => true
                       end)
@@ -145,7 +165,7 @@ Module ContinuousAuditing.
 
   Definition cleared_dashboard_log : RegisterLog CAAssertion :=
     map (fun n => mkResidualEntry (Txn n)
-                    (boundary_state cafeq observed_evidence (Txn n) boundary) None)
+                    (classify boundary CAFactEq observed_evidence (Txn n)) None)
         undefined_txns.
 
   (** Eight of the ten transactions survive dashboard clearing as
