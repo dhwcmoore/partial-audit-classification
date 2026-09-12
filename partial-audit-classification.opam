@@ -1,0 +1,33 @@
+opam-version: "2.0"
+name: "partial-audit-classification"
+version: "0.2.0~dev"
+synopsis: "A machine-checked classification kernel for undefined audit assertions"
+description: """
+Coq/Rocq development and extracted OCaml classifier enforcing that no
+audit conclusion may depend on a material assertion whose verification
+state is undefined: boundary-specification-driven classification,
+certificate-based admission separation, and automatic, append-only
+residual emission, proved sound end to end. Accompanies two manuscripts
+in preparation for submission; see docs/. See NON_CLAIMS.md for what
+this development does and does not establish.
+"""
+maintainer: "Duston Moore <dhwcmoore@gmail.com>"
+authors: "Duston Moore <dhwcmoore@gmail.com>"
+license: "MIT"
+homepage: "https://github.com/dhwcmoore/partial-audit-classification"
+bug-reports: "https://github.com/dhwcmoore/partial-audit-classification/issues"
+dev-repo: "git+https://github.com/dhwcmoore/partial-audit-classification.git"
+# Pinned to the exact versions this development, its CI, and the
+# manuscripts' formal-core line/theorem counts were verified against
+# (see CHANGELOG.md), not a range: the reproducibility goal here is a
+# fixed artefact tied to a specific paper submission, not a library
+# meant to track upstream. Loosen these only after re-verifying
+# make clean && make verify against whatever wider range is proposed.
+depends: [
+  "ocaml" {= "4.14.1"}
+  "dune" {= "3.14.0"}
+  "coq" {= "8.18.0"}
+]
+build: [
+  [make "verify"]
+]

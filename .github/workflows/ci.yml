@@ -8,7 +8,7 @@ jobs:
   verify:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Coq, OCaml, dune
         run: |
@@ -20,6 +20,23 @@ jobs:
           coqc --version
           ocaml -version
           dune --version
+
+      - name: Verify toolchain matches the opam pin
+        run: |
+          set -e
+          OCAML_PIN=$(grep -oP '"ocaml" \{= "\K[^"]+' partial-audit-classification.opam)
+          DUNE_PIN=$(grep -oP '"dune" \{= "\K[^"]+' partial-audit-classification.opam)
+          COQ_PIN=$(grep -oP '"coq" \{= "\K[^"]+' partial-audit-classification.opam)
+          OCAML_GOT=$(ocaml -version | grep -oP '\d+\.\d+\.\d+')
+          DUNE_GOT=$(dune --version)
+          COQ_GOT=$(coqc --version | head -1 | grep -oP '\d+\.\d+\.\d+')
+          echo "pinned:     ocaml=$OCAML_PIN dune=$DUNE_PIN coq=$COQ_PIN"
+          echo "installed:  ocaml=$OCAML_GOT dune=$DUNE_GOT coq=$COQ_GOT"
+          fail=0
+          [ "$OCAML_GOT" = "$OCAML_PIN" ] || { echo "::error::ocaml $OCAML_GOT drifted from the opam pin ($OCAML_PIN)"; fail=1; }
+          [ "$DUNE_GOT" = "$DUNE_PIN" ]   || { echo "::error::dune $DUNE_GOT drifted from the opam pin ($DUNE_PIN)"; fail=1; }
+          [ "$COQ_GOT" = "$COQ_PIN" ]     || { echo "::error::coq $COQ_GOT drifted from the opam pin ($COQ_PIN)"; fail=1; }
+          exit $fail
 
       - name: make verify
         run: make verify

@@ -1,0 +1,35 @@
+# This repository has no tagged release yet, so there is no `version` or
+# `date-released` below -- those fields will be added once v0.2.0 is cut,
+# rather than filled in now with a value that would immediately go stale.
+# The two manuscripts this repository accompanies are in preparation for
+# submission (see docs/) and are not yet citable as journal publications:
+# do not cite a volume, page range, or DOI for either of them until one
+# has actually been assigned.
+cff-version: 1.2.0
+message: >-
+  If you use this software or its formal development, please cite it as
+  below.
+title: partial-audit-classification
+type: software
+authors:
+  - given-names: Duston
+    family-names: Moore
+    email: dhwcmoore@gmail.com
+repository-code: 'https://github.com/dhwcmoore/partial-audit-classification'
+url: 'https://github.com/dhwcmoore/partial-audit-classification'
+abstract: >-
+  A Coq/Rocq-mechanised, extracted-to-OCaml classification kernel
+  enforcing that no audit conclusion may depend on a material assertion
+  whose verification state is undefined: boundary-specification-driven
+  classification, certificate-based admission separation over a
+  registered-process population, automatic and append-only residual
+  emission for non-admitted material dependencies, and an executable
+  opinion-decision procedure proved sound end to end.
+keywords:
+  - formal methods
+  - audit
+  - accounting information systems
+  - Coq
+  - Rocq
+  - verification
+license: MIT

@@ -175,17 +175,31 @@ ocaml/
 tools/
   fixture_check.py   runs the CLI and checks it against the Cases.v Examples
 
-NON_CLAIMS.md         what this repository does and does not establish
+NON_CLAIMS.md                        what this repository does and does not establish
+CHANGELOG.md                         v0.1 -> v0.2 by commit, grouped
+CITATION.cff                         software citation metadata (no release tag yet: see the file)
+partial-audit-classification.opam    pinned toolchain versions (opam lint passes)
 ```
 
 ## 8. Building
 
-Requirements: Coq/Rocq 8.18+, OCaml 4.14+, dune 3.x. On Debian/Ubuntu:
+This development is pinned to exact toolchain versions, not a range, because
+the goal is a fixed, reproducible artefact tied to a specific paper
+submission rather than a library meant to track upstream Coq/OCaml/dune
+releases. `partial-audit-classification.opam` records the pin
+(`ocaml.4.14.1`, `dune.3.14.0`, `coq.8.18.0`); CI builds against exactly
+these. On Debian/Ubuntu, the versions in the default repositories at the
+time of writing happen to match:
 
 ```bash
 sudo apt-get install coq ocaml-nox ocaml-findlib ocaml-dune
 make verify
 ```
+
+If your package manager gives you different versions, `make verify` is
+the actual test of whether this development still holds together, not
+`8.18+`/`4.14+` as a loose compatibility claim -- that looser phrasing is
+what the opam pin above replaced.
 
 ## 9. Provenance
 
