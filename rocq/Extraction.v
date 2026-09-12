@@ -3,6 +3,7 @@ Require Import PAC.Boundary.
 Require Import PAC.Admissibility.
 Require Import PAC.Residual.
 Require Import PAC.SelfAdmission.
+Require Import PAC.Pipeline.
 
 Require Coq.extraction.Extraction.
 Require Import Coq.extraction.ExtrOcamlBasic.
@@ -10,15 +11,18 @@ Require Import Coq.extraction.ExtrOcamlString.
 Require Import Coq.extraction.ExtrOcamlNatInt.
 
 (** Extraction.v — the executable boundary. Only the Type/bool-valued
-    decision procedures are extracted: [classify] and its supporting
-    machinery, which is what a runtime classifier actually computes. The Prop-valued specification predicates (admissible,
+    decision procedures are extracted: [classify], [validate_admission],
+    [decide_opinion], [process_dependency]/[classify_and_register], and
+    [run_pipeline], which is what a runtime classifier actually
+    computes. The Prop-valued specification predicates (admissible,
     OpinionAdmissible, proposes, admits, step) are not extracted: Coq
     erases Prop at extraction time because they carry no computational
     content, and that is the correct behaviour here, not an omission --
     they are proved about the classifier, not run by it. This mirrors
     the two-layer structure both papers describe: a declarative
     semantics bridged to an executable classifier by the theorems in
-    Admissibility.v and SelfAdmission.v. *)
+    Admissibility.v, SelfAdmission.v, Residual.v, and (for the composed
+    pipeline) Pipeline.v. *)
 
 Extraction Language OCaml.
 
@@ -41,4 +45,8 @@ Extraction "audit_kernel.ml"
   NotVerified MissingCertificate InvalidCertificate
   Unqualified InadmissibleOpinion
   mkDependencyPacket dep_assertion dep_material dep_state dep_proposal dep_certificate
-  dep_valid_admission dep_ok decide_opinion.
+  dep_valid_admission dep_ok decide_opinion
+  mkPipelineInput pi_bspec pi_eq pi_context pi_context_id pi_assertions pi_material
+  pi_proposal pi_certificate pi_registry build_packet
+  mkAuditDecision decision_classifications decision_residuals decision_opinion
+  run_pipeline.

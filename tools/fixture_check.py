@@ -12,14 +12,26 @@ import subprocess
 import sys
 
 EXPECTED = [
-    "Classification:       Undefined",
-    "Classification:       Verified",
+    # Wirecard: the same four fixtures rocq/Cases.v proves by reflexivity
+    # (fixture{1,2,3,4}_decision), checked here against decide_opinion's
+    # actual extracted output rather than the classification alone.
+    "Opinion:         Inadmissible [NotVerified(Undefined)]",
+    "Opinion:         Inadmissible [MissingCertificate]",
+    "Opinion:         Unqualified",
+    "Opinion:         Inadmissible [InvalidCertificate]",
+    # Continuous auditing: matches eight_residuals_from_pipeline and
+    # no_residual_is_verified.
     "Txn 0: Verified",
     "Txn 1: Verified",
     "Txn 2: Undefined",
     "Txn 9: Undefined",
+    "Residual register entries after this run: 8",
     'Residual register entries after "clearing" the dashboard: 8',
-    "Governing check -- Unreviewed <> Accepted: holds for every residual entry",
+    # SQL Unknown: matches absent_score_undefined, honest_zero_verified,
+    # absence_distinguishable_from_honest_zero, and the renderer pair.
+    "nullable_score_to_classification(None)   = Undefined",
+    "nullable_score_to_classification(Some 0) = Verified",
+    "distinguishable: yes",
     "silently_converted_render(Unknown) = 0",
     "silently_converted_render(Score 0) = 0",
     "disciplined_render(Unknown) = RUndefined",

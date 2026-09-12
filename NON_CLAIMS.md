@@ -40,25 +40,68 @@ true) and, as later sections are added, what v0.2 adds on top of it.
 
 ## What is proved
 
-`rocq/Admissibility.v`, `rocq/Residual.v`, and `rocq/SelfAdmission.v` prove
-three theorems, generally, over abstract `Fact`, `Assertion`, and `Process`
-types:
+Every theorem below is generic (quantified over abstract `Fact`,
+`Assertion`, and `Process` types, or over the finite fact/assertion types
+each fixture declares), holds for *any* boundary specification, evidence
+context, process registry, and dependency set you supply, and is
+`coqchk`-clean: no `Admitted`, no `Axiom`, closed under the global context.
 
-- **Default-Free Admissibility** (`default_free_admissibility`,
-  `contrapositive_inadmissible`): an opinion is admissible as unqualified
-  only if every material dependency is an admitted `Verified` classification.
-  This holds for *any* boundary specification and evidence context you
-  supply to `boundary_state`, not only for the three worked cases.
-- **Residual Preservation** (`residual_preservation`,
-  `residual_preservation_chain`): the residual register only grows.
-- **No Self-Admission** (`no_self_admission`, `role_separation`): a process
-  in the Proposer role cannot simultaneously occupy the Verifier role for
-  the same assertion.
+**v0.2's operative layer** is a chain of computational (`Type`/`bool`-valued,
+extracted) functions, each proved sound, composed into one pipeline:
 
-`rocq/Cases.v` then exercises these on three finite instances matching the
-papers' own examples (Wirecard, a ten-transaction continuous-auditing queue,
-and a SQL-Unknown rendering collapse). `coqchk` confirms every module is
-closed under the global context with no `Admitted` and no `Axiom`.
+- **Boundary classification** (`Boundary.v`, `classify`): computed from a
+  declared, identified, versioned `BoundarySpec` and an `EqbSpec`-witnessed
+  evidence context. `boundary_verified_has_witness` /
+  `boundary_undefined_no_witness` say a `Verified` outcome has a concrete
+  procedure witness, not merely that a Boolean computation returned `true`;
+  `boundary_verified_context_monotone` says adding evidence never loses one.
+- **Admission validation** (`SelfAdmission.v`, `validate_admission`): an
+  `AdmissionCertificate` is accepted only if it names the correct proposal,
+  the admitting process is registered with `Verifier` authority, that
+  process's identity differs from the proposer's, the decision is
+  affirmative, and the proposal itself claims `Verified`.
+  `proposer_certificate_rejected`, `certificate_for_wrong_proposal_rejected`,
+  and `non_verifier_certificate_rejected` cover each way a certificate can
+  fail.
+- **Residual emission** (`Residual.v`, `process_dependency` /
+  `classify_and_register`): a dependency that is not both `Verified` and
+  validly admitted (`dep_ok`) automatically produces a residual entry
+  (`nonadmitted_material_emits_residual`); one that is produces none
+  (`admitted_verified_emits_no_open_residual`). `residual_preservation` /
+  `residual_preservation_chain` (unchanged from v0.1) say the append-only
+  register never loses an entry; `orphan_escalation_sound` says an
+  ownerless entry is exactly what the orphan query returns.
+- **Opinion decision** (`Admissibility.v`, `decide_opinion`): returns
+  `Unqualified` only when every material dependency is `dep_ok`
+  (`decide_opinion_unqualified_sound`), with eight corollaries covering
+  every way a dependency can block it (`undefined_blocks_unqualified`
+  through `invalid_admission_blocks_unqualified`) and a completeness
+  theorem (`all_valid_dependencies_allow_unqualified`) showing the check
+  is not vacuously impossible to pass.
+- **The composed pipeline** (`Pipeline.v`, `run_pipeline`):
+  `pipeline_unqualified_sound` is the end-to-end theorem — given one
+  `PipelineInput` (boundary, context, assertions, registry, proposals,
+  certificates), the pipeline cannot decide `Unqualified` unless every
+  material assertion is classified `Verified` *and* carries a validly
+  admitted certificate. It is a corollary of `decide_opinion_unqualified_sound`
+  over the packets `run_pipeline` itself builds, not a separate proof, which
+  is the point: composition of already-proved stages, not new trust.
+
+**v0.1's declarative layer** remains, unchanged and still true, as a
+specification rather than the central result: `OpinionAdmissible` /
+`default_free_admissibility` / `contrapositive_inadmissible`
+(`Admissibility.v`) and `no_self_admission` / `role_separation`
+(`SelfAdmission.v`) state the same properties over a `Prop`-valued
+predicate defined to contain them by construction, rather than over an
+executable decision procedure.
+
+`rocq/Cases.v` exercises the full v0.2 pipeline on three finite instances
+matching the papers' own examples: Wirecard as four fixtures (incomplete
+evidence; complete evidence without a certificate; complete evidence with
+valid admission; complete evidence with proposer self-certification), a
+ten-transaction continuous-auditing queue run through the same pipeline,
+and a SQL-Unknown adapter connected to `classify` rather than left as a
+standalone toy.
 
 ## What is not proved, and what running the CLI does not show
 
@@ -70,19 +113,25 @@ closed under the global context with no `Admitted` and no `Axiom`.
   whatever those supplied predicates say, and no more.
 - **The three worked cases are illustrative traces, not empirical
   findings.** `Cases.v`'s Wirecard module encodes the narrative in the
-  papers' Section 6/7 as a boundary specification with five preconditions;
-  it is not a reconstruction of Ernst & Young's actual working papers, and
-  the CLI's "counterfactual with full evidence" is a demonstration that the
-  boundary specification is not vacuous, not a claim about what would have
-  happened.
+  papers' Section 7 as a boundary specification with five preconditions
+  exercised across four fixtures; it is not a reconstruction of Ernst &
+  Young's actual working papers, and the fixture using complete evidence
+  is a demonstration that the boundary specification is not vacuous, not a
+  claim about what would have happened.
 - **Only the mechanical Verified/Undefined branch is modelled.** Boundary
-  evaluation in this development produces exactly those two outcomes.
-  `Refuted`, `PresumptivelyVerified`, `PresumptivelyRefuted`, and
-  `EscalationRequired` are declared in `Base.v` and used in the residual
-  register and the case studies, but no generic, provably-correct procedure
-  for *assigning* them is formalised here; the papers describe them
-  qualitatively (Section 3) and this repository does not yet close that
-  gap.
+  evaluation (`classify`) produces exactly those two outcomes, and every
+  downstream v0.2 function — `dep_ok`, `decide_opinion`, `process_dependency`,
+  `run_pipeline` — inherits that limitation: they can react to `Refuted`,
+  the two presumptive states, or `EscalationRequired` if a caller supplies
+  a `DependencyPacket` already classified that way (and `dep_ok`/the
+  blocking theorems are stated generally enough to cover that case: see
+  `refuted_blocks_unqualified`, `presumptive_blocks_unqualified`,
+  `escalation_blocks_unqualified`), but no generic, provably-correct
+  procedure for *assigning* one of those four states from a boundary
+  specification and evidence context is formalised here. The papers
+  describe them qualitatively (Section 2/3) and this repository does not
+  yet close that gap. This was true in v0.1 and remains true in v0.2 by
+  the scope decision recorded above, not by oversight.
 - **No revocation, and no residual resolution or closure.** The boundary
   machinery is monotone in the evidence context
   (`boundary_verified_context_monotone`): nothing in this development
@@ -99,12 +148,17 @@ closed under the global context with no `Admitted` and no `Axiom`.
   an existing entry as closed either. This is a stated v0.2 scope
   decision (see NON_CLAIMS.md's v0.2 scope note above), not a gap
   discovered after the fact.
-- **`independently_admitted` and `proposes`/`admits` are abstract.** This
-  repository proves that a Proposer cannot also be a Verifier by
-  construction of the `Role` type. It does not model *how* an organisation
-  assigns roles, staffs an independent review function, or prevents
-  collusion between two distinct processes that are each honestly
-  single-role.
+- **"Independent" means registered identity and role, not organisational
+  independence.** `validate_admission` checks a distinct, registered
+  process identity holding `Verifier` authority in the supplied
+  `ProcessRegistry` — this is real and checked, not merely a `Role` type
+  with two constructors as in v0.1. It does not model *how* an
+  organisation assigns roles, staffs an independent review function, or
+  prevents collusion between two distinct processes, each honestly
+  single-role, that are controlled by the same person or organisation.
+  `no_self_admission` / `role_separation` remain as the underlying
+  structural fact (`proc_role`); they were always about role separation,
+  not about organisational independence, and v0.2 does not change that.
 - **Extraction is trusted, not verified.** As with any Coq development that
   extracts to OCaml, the extraction mechanism itself, the OCaml compiler,
   and this repository's hand-written CLI wiring around the extracted kernel

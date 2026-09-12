@@ -5,17 +5,26 @@ Require Import Coq.Strings.String.
 Open Scope string_scope.
 Require Import PAC.Base.
 Require Import PAC.Boundary.
+Require Import PAC.SelfAdmission.
 Require Import PAC.Admissibility.
 Require Import PAC.Residual.
+Require Import PAC.Pipeline.
 
 (** Cases.v — the three worked examples from Section 7 (STTT) / Sections
     7-8 (AIS): Wirecard as a classification trace, continuous auditing
     exception queues, and the SQL Unknown collapse. These exercise the
-    general theorems in Admissibility.v and Residual.v on finite
-    instances; they are illustrations of theorems proved generally, not
-    the extent of what is proved and not a claim that every possible
-    boundary specification or workflow has been enumerated. See
-    NON_CLAIMS.md. *)
+    general theorems in Pipeline.v, Admissibility.v, and Residual.v on
+    finite instances; they are illustrations of theorems proved
+    generally, not the extent of what is proved and not a claim that
+    every possible boundary specification or workflow has been
+    enumerated. See NON_CLAIMS.md.
+
+    v0.2 change from v0.1: every fixture below is run through
+    [run_pipeline] -- boundary classification, admission validation,
+    residual emission, and opinion decision all computed by the same
+    function the extracted classifier runs -- rather than hand-building
+    an [Opinion] or a [ResidualEntry] that merely reproduces what the
+    pipeline was intended to do. *)
 
 Module Wirecard.
 
@@ -72,20 +81,6 @@ Module Wirecard.
     classify boundary WFactEq observed_evidence CashExistencePhilippineTrustee = Undefined.
   Proof. reflexivity. Qed.
 
-  Definition material_all (_ : WAssertion) : bool := true.
-  Definition no_admissions (_ : WAssertion) : Prop := False.
-
-  Definition wirecard_opinion : Opinion WAssertion := mkOpinion [CashExistencePhilippineTrustee].
-
-  Example wirecard_opinion_inadmissible :
-    ~ OpinionAdmissible boundary WFactEq material_all no_admissions observed_evidence wirecard_opinion.
-  Proof.
-    eapply contrapositive_inadmissible with (a := CashExistencePhilippineTrustee).
-    - simpl. left. reflexivity.
-    - reflexivity.
-    - exact wirecard_state_undefined.
-  Qed.
-
   (** The disciplined counterfactual: with every precondition satisfied,
       the same assertion is Verified. This is not a claim about what
       actually happened at Wirecard; it exhibits that the boundary
@@ -98,6 +93,94 @@ Module Wirecard.
 
   Example wirecard_state_verified_with_full_evidence :
     classify boundary WFactEq full_evidence CashExistencePhilippineTrustee = Verified.
+  Proof. reflexivity. Qed.
+
+  Definition material_all (_ : WAssertion) : bool := true.
+
+  (** A minimal registry: one proposing process, one verifying process,
+      distinct identities. *)
+  Definition proposer : Process := mkProcess 1 Proposer.
+  Definition verifier : Process := mkProcess 2 Verifier.
+  Definition registry : ProcessRegistry := [proposer; verifier].
+
+  Definition proposal_for (s : EvidenceState) : ClassificationProposal WAssertion :=
+    mkClassificationProposal 100 CashExistencePhilippineTrustee s (process_id proposer).
+
+  Definition valid_cert : AdmissionCertificate :=
+    mkAdmissionCertificate 100 (process_id verifier) true.
+  Definition self_cert : AdmissionCertificate :=
+    mkAdmissionCertificate 100 (process_id proposer) true.
+
+  Definition input_for (ctx : list WFact) (claimed : EvidenceState) (cert : option AdmissionCertificate)
+      : PipelineInput WFact WAssertion :=
+    mkPipelineInput boundary WFactEq ctx 0
+      [CashExistencePhilippineTrustee] material_all
+      (fun _ => proposal_for claimed) (fun _ => cert) registry.
+
+  (** Fixture 1: incomplete evidence. Classification is Undefined; no
+      certificate is even presented, since there is nothing to admit.
+      A residual is emitted for the failure to verify, and the opinion
+      is inadmissible. *)
+  Definition input_incomplete := input_for observed_evidence Undefined None.
+
+  Example fixture1_decision :
+    decision_opinion (run_pipeline input_incomplete 0 []) =
+      InadmissibleOpinion [NotVerified CashExistencePhilippineTrustee Undefined].
+  Proof. reflexivity. Qed.
+
+  Example fixture1_residual_emitted :
+    List.length (decision_residuals (run_pipeline input_incomplete 0 [])) = 1.
+  Proof. reflexivity. Qed.
+
+  (** Fixture 2: complete evidence, but no admission certificate was
+      presented. Classification is Verified -- the boundary genuinely
+      supports it -- but Verified alone is not [dep_ok]: a residual is
+      still emitted, for the missing certificate rather than for a
+      classification failure, and the opinion is still inadmissible.
+      This is the fixture that exercises the paper's two-conjunct rule
+      most directly: state = Verified is necessary but not sufficient. *)
+  Definition input_no_certificate := input_for full_evidence Verified None.
+
+  Example fixture2_decision :
+    decision_opinion (run_pipeline input_no_certificate 0 []) =
+      InadmissibleOpinion [MissingCertificate CashExistencePhilippineTrustee].
+  Proof. reflexivity. Qed.
+
+  Example fixture2_residual_emitted :
+    List.length (decision_residuals (run_pipeline input_no_certificate 0 [])) = 1.
+  Proof. reflexivity. Qed.
+
+  (** Fixture 3: complete evidence, admitted by the verifier, whose
+      identity is distinct from the proposer's. Classification is
+      Verified, the certificate validates, no residual is left open,
+      and the opinion is Unqualified. *)
+  Definition input_valid_admission := input_for full_evidence Verified (Some valid_cert).
+
+  Example fixture3_decision :
+    decision_opinion (run_pipeline input_valid_admission 0 []) = Unqualified.
+  Proof. reflexivity. Qed.
+
+  Example fixture3_no_residual :
+    decision_residuals (run_pipeline input_valid_admission 0 []) = [].
+  Proof. reflexivity. Qed.
+
+  (** Fixture 4: complete evidence, but the "certificate" names the
+      proposer as its own admitting verifier. [validate_admission]
+      rejects it (SelfAdmission.v's [proposer_certificate_rejected]),
+      the certificate is invalid rather than merely missing, and the
+      opinion is inadmissible even though the classification itself is
+      Verified. This is the fixture that exhibits Theorem 3 (No
+      Self-Admission) inside the pipeline, not just at the level of the
+      abstract [Role] type. *)
+  Definition input_self_certified := input_for full_evidence Verified (Some self_cert).
+
+  Example fixture4_decision :
+    decision_opinion (run_pipeline input_self_certified 0 []) =
+      InadmissibleOpinion [InvalidCertificate CashExistencePhilippineTrustee].
+  Proof. reflexivity. Qed.
+
+  Example fixture4_residual_emitted :
+    List.length (decision_residuals (run_pipeline input_self_certified 0 [])) = 1.
   Proof. reflexivity. Qed.
 
 End Wirecard.
@@ -151,55 +234,79 @@ Module ContinuousAuditing.
   Example txn5_undefined : classify boundary CAFactEq observed_evidence (Txn 5) = Undefined.
   Proof. reflexivity. Qed.
 
-  (** The disciplined algorithm of Section 7.2: every non-Verified
-      transaction writes a residual entry. This is
-      [state(e) := Unreviewed; residual_register.add(e)] made concrete;
-      the governing inequality "Unreviewed != Accepted" is
-      [no_residual_is_verified] below. *)
-  Definition undefined_txns : list nat :=
-    filter (fun n => match classify boundary CAFactEq observed_evidence (Txn n) with
-                      | Verified => false
-                      | _ => true
-                      end)
-           (seq 0 10).
+  (** The analyst proposes; a supervisor, a distinct registered
+      identity, admits transactions 0 and 1 (the ones the boundary
+      actually classifies Verified). Transactions 2 through 9 carry no
+      certificate: nothing was reviewed for them to admit. *)
+  Definition analyst : Process := mkProcess 0 Proposer.
+  Definition supervisor : Process := mkProcess 1 Verifier.
+  Definition ca_registry : ProcessRegistry := [analyst; supervisor].
 
-  (** v0.2 note: this still builds the log directly from
-      [undefined_txns] rather than routing every transaction through
-      [process_dependency]/[classify_and_register]
-      (Residual.v) -- that refactor, and the admission certificates a
-      full pipeline run would also require for transactions 0 and 1,
-      is deferred to the Cases.v/pipeline refactor. The residual
-      entries below record the same boundary provenance
-      [process_dependency] would have recorded (this boundary's id and
-      version, evidence context id 0) and the same reason (not
-      Verified), so the two constructions agree on every field a
-      pipeline run would also produce for these ten transactions. *)
-  Definition cleared_dashboard_log : RegisterLog CAAssertion :=
-    map (fun n =>
-           let s := classify boundary CAFactEq observed_evidence (Txn n) in
-           mkResidualEntry n (Txn n) s (boundary_id boundary) (boundary_version boundary) 0
-             (NotVerified (Txn n) s) None)
-        undefined_txns.
+  Definition ca_state (n : nat) : EvidenceState :=
+    classify boundary CAFactEq observed_evidence (Txn n).
 
-  (** Eight of the ten transactions survive dashboard clearing as
-      residuals; none of them silently vanishes into "no exception
-      noted". *)
-  Example eight_residuals_survive_clearing :
-    List.length cleared_dashboard_log = 8.
+  Definition ca_proposal (n : nat) : ClassificationProposal CAAssertion :=
+    mkClassificationProposal n (Txn n) (ca_state n) (process_id analyst).
+
+  Definition ca_certificate (n : nat) : option AdmissionCertificate :=
+    if Nat.eqb n 0 then Some (mkAdmissionCertificate 0 (process_id supervisor) true)
+    else if Nat.eqb n 1 then Some (mkAdmissionCertificate 1 (process_id supervisor) true)
+    else None.
+
+  Definition ca_input : PipelineInput CAFact CAAssertion :=
+    mkPipelineInput boundary CAFactEq observed_evidence 0
+      (map Txn (seq 0 10)) (fun _ => true)
+      (fun a => match a with Txn n => ca_proposal n end)
+      (fun a => match a with Txn n => ca_certificate n end)
+      ca_registry.
+
+  Definition ca_decision : AuditDecision CAAssertion := run_pipeline ca_input 0 [].
+
+  (** The disciplined algorithm of Section 7.2, made literal: every
+      transaction that is not both Verified and admitted -- eight of
+      the ten -- automatically writes a residual entry via
+      [process_dependency]/[classify_and_register] (Residual.v); none
+      of them silently vanishes into "no exception noted", and the
+      opinion cannot be Unqualified while they remain (this is the same
+      [decide_opinion] the Wirecard fixtures above exercise, not a
+      separate check). *)
+  Example eight_residuals_from_pipeline :
+    List.length (decision_residuals ca_decision) = 8.
+  Proof. reflexivity. Qed.
+
+  Example ca_opinion_inadmissible :
+    decision_opinion ca_decision <> Unqualified.
+  Proof. unfold ca_decision. discriminate. Qed.
+
+  Lemma ca_residual_states :
+    map residual_state (decision_residuals ca_decision) =
+    [Undefined; Undefined; Undefined; Undefined; Undefined; Undefined; Undefined; Undefined].
   Proof. reflexivity. Qed.
 
   Example no_residual_is_verified :
-    forall e, In e cleared_dashboard_log -> residual_state e <> Verified.
+    forall e, In e (decision_residuals ca_decision) -> residual_state e <> Verified.
   Proof.
     intros e Hin Hcontra.
-    unfold cleared_dashboard_log, undefined_txns in Hin.
-    apply in_map_iff in Hin as [n [Heq Hin2]].
-    apply filter_In in Hin2 as [_ Hcond].
-    subst e.
-    simpl in Hcontra.
-    rewrite Hcontra in Hcond.
-    simpl in Hcond.
-    discriminate.
+    assert (Hin' : In (residual_state e) (map residual_state (decision_residuals ca_decision)))
+      by (apply in_map; exact Hin).
+    rewrite ca_residual_states, Hcontra in Hin'.
+    simpl in Hin'. intuition discriminate.
+  Qed.
+
+  (** Dashboard clearing is any permitted workflow transition, i.e. any
+      [step]: it can only append, never remove. Applying
+      [residual_preservation] to the pipeline's own output shows the
+      eight residuals survive *any* such clearing, not merely the
+      specific empty one -- there is no [Unreviewed] state to invoke
+      here, only the append-only register already proved in
+      Residual.v. *)
+  Example dashboard_clearing_preserves_residuals :
+    forall (cleared_log : RegisterLog CAAssertion),
+      step (decision_residuals ca_decision) cleared_log ->
+      forall e, In e (decision_residuals ca_decision) -> In e cleared_log.
+  Proof.
+    intros cleared_log Hstep e Hin.
+    eapply residual_preservation; eauto.
   Qed.
 
 End ContinuousAuditing.
@@ -208,17 +315,91 @@ End ContinuousAuditing.
 Module SqlUnknown.
 
   (** A minimal model of the reporting-layer collapse from Section 7.3
-      (STTT) / Section 2.3 of the AIS paper: a risk score that is either
-      a concrete value or Unknown, and two candidate ways of rendering
-      it downstream. This is deliberately not a model of SQL's
-      three-valued logic itself (Codd 1979 already supplies that at the
-      data layer); it models what happens one layer up, where the
-      papers locate the actual failure. *)
+      (STTT) / Section 2.3 of the AIS paper, now connected to the
+      central pipeline rather than left as a standalone two-constructor
+      toy: presence of a risk score is boundary evidence like any
+      other, so absence classifies Undefined *by construction*, through
+      the same [classify] every other fixture uses, and
+      [pipeline_residual_implies_not_unqualified_witness] (Pipeline.v)
+      is what rules out an absent score ever reaching Unqualified --
+      not a fact re-derived for this module specifically. *)
 
+  Inductive SqlFact := ScoreIsPresent.
+  Inductive SqlAssertion := RiskScoreAssertion.
+
+  Definition sqlfeq (x y : SqlFact) : bool := match x, y with ScoreIsPresent, ScoreIsPresent => true end.
+
+  Lemma sqlfeq_true_iff : forall x y, sqlfeq x y = true <-> x = y.
+  Proof. intros [] []; simpl; split; intro H; [reflexivity | reflexivity]. Qed.
+
+  Definition SqlFactEq : EqbSpec SqlFact := mkEqbSpec sqlfeq sqlfeq_true_iff.
+
+  Definition score_procedure : Procedure SqlFact SqlAssertion :=
+    mkProcedure 0 "Risk score present" [ScoreIsPresent] (fun _ => true).
+
+  Definition sql_boundary : BoundarySpec SqlFact SqlAssertion :=
+    mkBoundarySpec 2 1 [score_procedure].
+
+  (** The adapter: a [option nat] risk score becomes boundary evidence
+      -- [ScoreIsPresent] in the context iff the score is [Some _] --
+      and the classification is whatever [classify] computes from
+      that, never a numeric coercion. *)
+  Definition context_for (r : option nat) : list SqlFact :=
+    match r with
+    | Some _ => [ScoreIsPresent]
+    | None => []
+    end.
+
+  Definition nullable_score_to_classification (r : option nat) : EvidenceState :=
+    classify sql_boundary SqlFactEq (context_for r) RiskScoreAssertion.
+
+  (** Absence does not become numeric zero: it classifies Undefined,
+      the same outcome any other absent evidence produces, and it
+      remains distinguishable from an honestly-zero score, which
+      classifies Verified because the score is present. *)
+  Example absent_score_undefined :
+    nullable_score_to_classification None = Undefined.
+  Proof. reflexivity. Qed.
+
+  Example honest_zero_verified :
+    nullable_score_to_classification (Some 0) = Verified.
+  Proof. reflexivity. Qed.
+
+  Example absence_distinguishable_from_honest_zero :
+    nullable_score_to_classification None <> nullable_score_to_classification (Some 0).
+  Proof. discriminate. Qed.
+
+  (** The downstream adapter cannot produce an admitted Verified
+      assertion merely from absence: for *any* registry, proposal, and
+      certificate an caller might supply -- not only the ones this
+      module happens to construct -- a pipeline run over an absent
+      score cannot decide Unqualified. This is
+      [pipeline_residual_implies_not_unqualified_witness]
+      (Pipeline.v) applied here, not a fact special to this fixture. *)
+  Example absence_cannot_reach_unqualified :
+    forall (registry : ProcessRegistry) (start_id : ResidualId) (log : RegisterLog SqlAssertion)
+      (proposal : SqlAssertion -> ClassificationProposal SqlAssertion)
+      (cert : SqlAssertion -> option AdmissionCertificate),
+      let inp := mkPipelineInput sql_boundary SqlFactEq (context_for None) 0
+                   [RiskScoreAssertion] (fun _ => true) proposal cert registry in
+      decision_opinion (run_pipeline inp start_id log) <> Unqualified.
+  Proof.
+    intros registry start_id log proposal cert inp.
+    unfold inp.
+    eapply pipeline_residual_implies_not_unqualified_witness with (a := RiskScoreAssertion).
+    - left. reflexivity.
+    - reflexivity.
+    - unfold dep_ok, build_packet. simpl. reflexivity.
+  Qed.
+
+  (** The pre-existing renderer illustration: two ways of turning a
+      classification back into a downstream value, one that collapses
+      Unknown into an honest zero and one that keeps them apart. This
+      is about *rendering* a classification, the layer above the
+      boundary machinery above; [nullable_score_to_classification]
+      above is about *computing* it. *)
   Inductive RiskScore := Score (n : nat) | ScoreUnknown.
 
-  (** The undisciplined collapse: Unknown is rendered as zero, exactly
-      the "null risk score rendered as zero" example in both papers. *)
   Definition silently_converted_render (r : RiskScore) : nat :=
     match r with
     | Score n => n
@@ -233,14 +414,10 @@ Module SqlUnknown.
     | ScoreUnknown => RUndefined
     end.
 
-  (** The undisciplined renderer makes an honestly-zero score
-      indistinguishable from Unknown: a downstream reader cannot tell
-      "no risk" from "we don't know". *)
   Example silent_conversion_collides_with_honest_zero :
     silently_converted_render ScoreUnknown = silently_converted_render (Score 0).
   Proof. reflexivity. Qed.
 
-  (** The disciplined renderer keeps them apart by construction. *)
   Example disciplined_render_distinguishes :
     disciplined_render ScoreUnknown <> disciplined_render (Score 0).
   Proof. discriminate. Qed.
