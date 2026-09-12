@@ -3,12 +3,17 @@
 > No audit conclusion may depend on a material assertion whose verification
 > state is undefined.
 
-**Status:** v0.2.0. An executable pipeline — boundary classification,
-certificate-based admission, automatic residual emission, and an opinion
-decision procedure — is built and proved sound end to end
-(`pipeline_unqualified_sound`), extracted to OCaml, and exercised on four
-Wirecard fixtures, a ten-transaction continuous-auditing run, and a SQL
-Unknown adapter. Coq 8.18.0, `coqchk` clean, no `Admitted`, no `Axiom`.
+**Status:** pre-v0.2.0 (untagged). An executable pipeline — boundary
+classification, certificate-based admission, automatic residual emission,
+and an opinion decision procedure — is built and proved sound end to end
+(`pipeline_unqualified_sound`), extracted to OCaml, and exercised on six
+Wirecard fixtures (including two adversarial ones added after an external
+review found a proposal-binding gap; see the commit history around
+`591d28e`), a ten-transaction continuous-auditing run, and a SQL Unknown
+adapter. Coq 8.18.0, `coqchk` clean, no `Admitted`, no `Axiom`, all 49
+named `Theorem`/`Corollary`/`Lemma` declarations in the formal core
+individually confirmed closed under the global context
+(`rocq/PrintAssumptions.v`).
 
 This repository is the accompanying formal development for two manuscripts
 by the same author:
@@ -29,9 +34,15 @@ is not established here before citing either paper against it.
 ## 1. The invariant
 
 Audit systems sometimes use unverifiable assertions where verified ones are
-required. This is a type error: an assertion of type `Undefined` used where
-an assertion of type `Verified` is required. The discipline that makes this
-error unrepresentable rests on one rule:
+required. This is close enough to a type error to be a useful analogy: an
+assertion classified `Undefined` used where an assertion classified
+`Verified` is required. The discipline that makes this rests on one rule —
+and on soundness of an executable decision procedure, not on the type
+being unconstructible: nothing stops a caller from constructing the value
+`Unqualified` directly, any more than a type system stops a wrong literal.
+What is proved is narrower and is what this repository actually claims: no
+execution of `run_pipeline` produces `Unqualified` under a declared
+specification without satisfying the rule below.
 
 ```
 Admissible(Opinion) =>
@@ -75,9 +86,9 @@ make demo          # run the three worked cases through the extracted CLI
 | --- | --- | --- |
 | `pipeline_unqualified_sound` | `rocq/Pipeline.v` | The end-to-end theorem: `run_pipeline` cannot decide `Unqualified` unless every material assertion is classified `Verified` *and* carries a validly admitted certificate. |
 | `boundary_verified_has_witness` / `boundary_undefined_no_witness` | `rocq/Boundary.v` | A `Verified` classification has a concrete procedure witness; `boundary_verified_context_monotone` says adding evidence never loses one. |
-| `validate_admission` + `proposer_certificate_rejected` / `certificate_for_wrong_proposal_rejected` / `non_verifier_certificate_rejected` | `rocq/SelfAdmission.v` | An admission certificate is accepted only if it names the right proposal, a registered `Verifier` distinct from the proposer, and an affirmative decision on a `Verified` proposal — each failure mode has its own rejection theorem. |
+| `validate_admission` + six rejection theorems (`certificate_for_wrong_proposal_rejected`, `non_verifier_certificate_rejected`, `non_proposer_certificate_rejected`, `proposer_certificate_rejected`, `decision_false_certificate_rejected`, `unverified_proposal_certificate_rejected`) | `rocq/SelfAdmission.v` | An admission certificate is accepted only if it names the right proposal, a registered `Verifier` distinct from the proposer, a registered `Proposer`, an affirmative decision, and a `Verified` proposal — all six conjuncts, each with its own rejection theorem. `build_packet_proposal_matches` (`rocq/Pipeline.v`) additionally proves the proposal `validate_admission` checks is structurally tied to the real classified assertion and state, closing a binding gap an external review found in an earlier version (see the commit history around `591d28e`). **Not established:** uniqueness of caller-supplied `ProcessId`/`ProposalId` values; reusing one may permit certificate replay across proposals or order-dependent registry lookup — see `NON_CLAIMS.md`. |
 | `decide_opinion_unqualified_sound` + eight blocking corollaries + `all_valid_dependencies_allow_unqualified` | `rocq/Admissibility.v` | Soundness and completeness of the executable opinion decision `decide_opinion`. |
-| `nonadmitted_material_emits_residual` / `admitted_verified_emits_no_open_residual` / `residual_preservation(_chain)` / `orphan_escalation_sound` | `rocq/Residual.v` | Residual emission, append-only preservation, and orphan-query soundness. |
+| `nonadmitted_material_emits_residual` / `nonmaterial_emits_no_residual` / `admitted_verified_emits_no_open_residual` / `residual_preservation(_chain)` / `classify_and_register_emits_for_dependency` / `orphan_escalation_sound` | `rocq/Residual.v` | Materiality-gated residual emission (with membership in the output log proved, not just non-disagreement with blocking), append-only preservation, and orphan-query soundness. |
 | `default_free_admissibility` / `contrapositive_inadmissible` (+ `no_self_admission` / `role_separation`) | `rocq/Admissibility.v` / `rocq/SelfAdmission.v` | The v0.1 declarative layer: the same properties stated over `OpinionAdmissible`, a `Prop` defined to contain them by construction. Still true; no longer the central result. |
 
 `decide_opinion` is not a separate postulate bolted onto the theorem: it
@@ -98,9 +109,9 @@ to do.
 
 | Case | What it shows | Result |
 | --- | --- | --- |
-| **Wirecard** (`Wirecard`), 4 fixtures | A cash-existence assertion against a five-precondition boundary, varying evidence and admission | incomplete evidence → `Undefined`, inadmissible; complete evidence, no certificate → `Verified` but inadmissible (`MissingCertificate`); complete evidence, valid admission → `Unqualified`; complete evidence, proposer self-certifies → inadmissible (`InvalidCertificate`) |
+| **Wirecard** (`Wirecard`), 6 fixtures | A cash-existence assertion against a five-precondition boundary, varying evidence, admission, and (in the two adversarial fixtures) the named proposer | incomplete evidence → `Undefined`, inadmissible; complete evidence, no certificate → `Verified` but inadmissible (`MissingCertificate`); complete evidence, valid admission → `Unqualified`; complete evidence, proposer self-certifies → inadmissible (`InvalidCertificate`); complete evidence, unregistered proposer → inadmissible (`InvalidCertificate`); complete evidence, proposer registered with the wrong role → inadmissible (`InvalidCertificate`) |
 | **Continuous auditing** (`ContinuousAuditing`) | Ten transactions run through the pipeline; two reviewed and admitted, eight not | 8 residual entries emitted automatically; all survive any further workflow `step` ("clearing the dashboard") |
-| **SQL Unknown** (`SqlUnknown`) | Score presence as boundary evidence via a `nullable_score_to_classification` adapter, plus the pre-existing two-renderer illustration | absence classifies `Undefined` and can never reach `Unqualified` under *any* registry/proposal/certificate (`pipeline_residual_implies_not_unqualified_witness`); the undisciplined renderer collapses `Unknown` and `0`, the disciplined one keeps them apart |
+| **SQL Unknown** (`SqlUnknown`) | Score presence as boundary evidence via a `nullable_score_to_classification` adapter, plus the pre-existing two-renderer illustration | absence classifies `Undefined` and can never reach `Unqualified` under *any* registry/proposal/certificate (`pipeline_failed_material_dependency_blocks_unqualified`); the undisciplined renderer collapses `Unknown` and `0`, the disciplined one keeps them apart |
 
 Running `make demo` prints all three; see `ocaml/cli/main.ml`, which mirrors
 `Cases.v`'s fixtures exactly. These are illustrative traces exercising the
@@ -152,6 +163,7 @@ rocq/
   Admissibility.v   OpinionAdmissible (v0.1) + DependencyPacket, decide_opinion (v0.2)
   Residual.v        ResidualEntry, RegisterLog, process_dependency, classify_and_register
   Pipeline.v        PipelineInput, run_pipeline, pipeline_unqualified_sound
+  PrintAssumptions.v  Print Assumptions on all 49 named declarations
   Cases.v           Wirecard, ContinuousAuditing, SqlUnknown worked instances
   Extraction.v      Extraction directives -> audit_kernel.ml/.mli
   _CoqProject, Makefile

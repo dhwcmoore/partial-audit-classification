@@ -56,21 +56,43 @@ extracted) functions, each proved sound, composed into one pipeline:
   procedure witness, not merely that a Boolean computation returned `true`;
   `boundary_verified_context_monotone` says adding evidence never loses one.
 - **Admission validation** (`SelfAdmission.v`, `validate_admission`): an
-  `AdmissionCertificate` is accepted only if it names the correct proposal,
-  the admitting process is registered with `Verifier` authority, that
-  process's identity differs from the proposer's, the decision is
-  affirmative, and the proposal itself claims `Verified`.
-  `proposer_certificate_rejected`, `certificate_for_wrong_proposal_rejected`,
-  and `non_verifier_certificate_rejected` cover each way a certificate can
-  fail.
+  `AdmissionCertificate` is accepted only if it names the correct proposal
+  by identifier, the admitting process is registered with `Verifier`
+  authority, the proposing process is *also* registered, with `Proposer`
+  authority, that process's identity differs from the admitting process's,
+  the decision is affirmative, and the proposal itself claims `Verified` —
+  six conjuncts, each with its own rejection theorem:
+  `certificate_for_wrong_proposal_rejected`, `non_verifier_certificate_rejected`,
+  `non_proposer_certificate_rejected`, `proposer_certificate_rejected`,
+  `decision_false_certificate_rejected`, and
+  `unverified_proposal_certificate_rejected`. The proposer-registration
+  conjunct and its rejection theorem, and the two decision/classification
+  rejection theorems, were added after an external review of an earlier
+  version of this development found that the proposing process's identity
+  was accepted unchecked against the registry (see the commit history
+  around `591d28e`); that same review found that `Pipeline.v` accepted an
+  arbitrary, caller-supplied `ClassificationProposal` per assertion with
+  nothing checked against the assertion actually being classified —
+  `build_packet_proposal_matches` (`Pipeline.v`) is the fix, and is
+  described below.
 - **Residual emission** (`Residual.v`, `process_dependency` /
-  `classify_and_register`): a dependency that is not both `Verified` and
-  validly admitted (`dep_ok`) automatically produces a residual entry
-  (`nonadmitted_material_emits_residual`); one that is produces none
-  (`admitted_verified_emits_no_open_residual`). `residual_preservation` /
-  `residual_preservation_chain` (unchanged from v0.1) say the append-only
-  register never loses an entry; `orphan_escalation_sound` says an
-  ownerless entry is exactly what the orphan query returns.
+  `classify_and_register`): a dependency that is material and not both
+  `Verified` and validly admitted (`dep_ok`) automatically produces a
+  residual entry (`nonadmitted_material_emits_residual`); a non-material
+  one does not, regardless of `dep_ok` (`nonmaterial_emits_no_residual` —
+  an earlier version emitted for every failing dependency regardless of
+  materiality, broader than this document's own "every material
+  dependency" wording, and was tightened to match it); one that is
+  `dep_ok` produces none (`admitted_verified_emits_no_open_residual`).
+  `residual_preservation` / `residual_preservation_chain` (unchanged from
+  v0.1) say the append-only register never loses an entry;
+  `classify_and_register_step` says one pipeline run's own emissions only
+  extend the log it started from; `classify_and_register_emits_for_dependency`
+  proves, by induction over the dependency list, that a specific failing
+  dependency's entry is actually present in the resulting log, not merely
+  that emission and the opinion decision cannot disagree in principle;
+  `orphan_escalation_sound` says an ownerless entry is exactly what the
+  orphan query returns.
 - **Opinion decision** (`Admissibility.v`, `decide_opinion`): returns
   `Unqualified` only when every material dependency is `dep_ok`
   (`decide_opinion_unqualified_sound`), with eight corollaries covering
@@ -78,14 +100,41 @@ extracted) functions, each proved sound, composed into one pipeline:
   through `invalid_admission_blocks_unqualified`) and a completeness
   theorem (`all_valid_dependencies_allow_unqualified`) showing the check
   is not vacuously impossible to pass.
-- **The composed pipeline** (`Pipeline.v`, `run_pipeline`):
-  `pipeline_unqualified_sound` is the end-to-end theorem — given one
-  `PipelineInput` (boundary, context, assertions, registry, proposals,
-  certificates), the pipeline cannot decide `Unqualified` unless every
-  material assertion is classified `Verified` *and* carries a validly
-  admitted certificate. It is a corollary of `decide_opinion_unqualified_sound`
-  over the packets `run_pipeline` itself builds, not a separate proof, which
-  is the point: composition of already-proved stages, not new trust.
+- **The composed pipeline** (`Pipeline.v`, `run_pipeline`): a
+  `PipelineInput` supplies a boundary spec, context, assertions, registry,
+  a certificate function, and — as of the fix described above — a
+  *proposal identity and proposer* per assertion (`pi_proposal_id`,
+  `pi_proposer`), not a complete proposal. `build_packet` constructs the
+  `ClassificationProposal` itself, from the real assertion and the real,
+  freshly computed classification; `build_packet_proposal_matches` proves
+  the two always agree, for every `PipelineInput`, so a proposal for one
+  assertion or claiming one classification can no longer be attached to a
+  dependency packet for a different assertion or classification.
+  `pipeline_unqualified_sound` is the end-to-end theorem — the pipeline
+  cannot decide `Unqualified` unless every material assertion is
+  classified `Verified` *and* carries a validly admitted certificate. It
+  is a corollary of `decide_opinion_unqualified_sound` over the packets
+  `run_pipeline` itself builds, not a separate proof, which is the point:
+  composition of already-proved stages, not new trust.
+  `pipeline_failed_material_dependency_blocks_unqualified` and
+  `pipeline_failed_material_dependency_emits_residual` (renamed from a
+  single, inaccurately-named theorem after the same review — its
+  hypothesis was `dep_ok = false` and it never mentioned residuals at
+  all, despite a name suggesting it did) state, respectively, that a
+  failing material dependency blocks `Unqualified` and that its entry is
+  demonstrably present in the output log.
+
+  **Not established by any of the above:** uniqueness of the
+  caller-supplied `ProcessId` and `ProposalId` values. Two proposals
+  sharing a `ProposalId` make a certificate drawn up for one also
+  validate against the other, since the check compares identifiers, not
+  proposal contents; two registry entries sharing a `ProcessId` make
+  `process_lookup` return whichever is found first, so role and identity
+  checks depend on declaration order rather than a well-defined
+  population. This is a caller responsibility this development assumes
+  rather than enforces, in the same sense the boundary specification and
+  materiality predicate are caller-supplied without a well-formedness
+  check; it is not detected or rejected by any theorem above.
 
 **v0.1's declarative layer** remains, unchanged and still true, as a
 specification rather than the central result: `OpinionAdmissible` /
@@ -96,12 +145,16 @@ predicate defined to contain them by construction, rather than over an
 executable decision procedure.
 
 `rocq/Cases.v` exercises the full v0.2 pipeline on three finite instances
-matching the papers' own examples: Wirecard as four fixtures (incomplete
+matching the papers' own examples: Wirecard as six fixtures (incomplete
 evidence; complete evidence without a certificate; complete evidence with
-valid admission; complete evidence with proposer self-certification), a
-ten-transaction continuous-auditing queue run through the same pipeline,
-and a SQL-Unknown adapter connected to `classify` rather than left as a
-standalone toy.
+valid admission; complete evidence with proposer self-certification;
+complete evidence with an unregistered proposer; complete evidence with a
+proposer registered under the wrong role — the last two added as
+adversarial regression tests after the external review described above,
+isolated from each other with a second registered verifier so each tests
+one failure mode), a ten-transaction continuous-auditing queue run through
+the same pipeline, and a SQL-Unknown adapter connected to `classify`
+rather than left as a standalone toy.
 
 ## What is not proved, and what running the CLI does not show
 
@@ -114,10 +167,11 @@ standalone toy.
 - **The three worked cases are illustrative traces, not empirical
   findings.** `Cases.v`'s Wirecard module encodes the narrative in the
   papers' Section 7 as a boundary specification with five preconditions
-  exercised across four fixtures; it is not a reconstruction of Ernst &
-  Young's actual working papers, and the fixture using complete evidence
-  is a demonstration that the boundary specification is not vacuous, not a
-  claim about what would have happened.
+  exercised across six fixtures (four narrative, two adversarial); it is
+  not a reconstruction of Ernst & Young's actual working papers, and the
+  fixture using complete evidence is a demonstration that the boundary
+  specification is not vacuous, not a claim about what would have
+  happened.
 - **Only the mechanical Verified/Undefined branch is modelled.** Boundary
   evaluation (`classify`) produces exactly those two outcomes, and every
   downstream v0.2 function — `dep_ok`, `decide_opinion`, `process_dependency`,
@@ -159,6 +213,17 @@ standalone toy.
   `no_self_admission` / `role_separation` remain as the underlying
   structural fact (`proc_role`); they were always about role separation,
   not about organisational independence, and v0.2 does not change that.
+- **Identifier uniqueness is a caller responsibility, not enforced.** The
+  kernel does not establish uniqueness of `ProcessId` or `ProposalId`
+  values. Claims that a certificate identifies one exact proposal, and
+  that registry lookup identifies one exact process, are conditional on
+  the caller supplying unique identifiers. Reusing a `ProposalId` across
+  two distinct proposals lets a certificate drawn up for one validate
+  against the other as well, since `validate_admission` compares
+  identifiers, not proposal contents; reusing a `ProcessId` across two
+  distinct registry entries makes `process_lookup` (and the role/identity
+  checks built on it) depend on which entry is declared first rather than
+  on a well-defined population. Neither is detected or rejected.
 - **Extraction is trusted, not verified.** As with any Coq development that
   extracts to OCaml, the extraction mechanism itself, the OCaml compiler,
   and this repository's hand-written CLI wiring around the extracted kernel

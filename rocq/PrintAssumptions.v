@@ -16,20 +16,29 @@ Require Import PAC.Pipeline.
     from that hardcoded list for one commit; see the commit history).
 
     [Print Assumptions] is a different, complementary check: run per
-    theorem rather than per compiled module, it reports every axiom
-    the named theorem's proof term transitively depends on, and prints
-    "Closed under the global context" when there are none. Listing
-    every publication-facing theorem here, in one file, means `make
-    assumptions` (or grepping this file's compiled output) is one
-    place to look, rather than trusting that coqchk's hardcoded module
-    list was kept in sync by hand. *)
+    declaration rather than per compiled module, it reports every axiom
+    the named declaration's proof term transitively depends on, and
+    prints "Closed under the global context" when there are none.
+    Listing every named Theorem, Corollary, and Lemma in the formal
+    core (Base.v through Pipeline.v) here -- all 49 of them, not a
+    curated subset -- means `make assumptions` (or grepping this
+    file's compiled output) is one place to look, rather than trusting
+    that coqchk's hardcoded module list was kept in sync by hand, or
+    that a hand-picked selection here happened to include everything
+    worth checking. *)
 
+Print Assumptions Base.eqb_state_eq.
+Print Assumptions Base.evidence_state_dec.
+
+Print Assumptions Boundary.eqb_refl.
 Print Assumptions Boundary.classify_verified_iff.
 Print Assumptions Boundary.classify_undefined_iff.
 Print Assumptions Boundary.procedure_satisfied_sound.
 Print Assumptions Boundary.procedure_satisfied_complete.
 Print Assumptions Boundary.boundary_verified_has_witness.
 Print Assumptions Boundary.boundary_undefined_no_witness.
+Print Assumptions Boundary.has_fact_monotone.
+Print Assumptions Boundary.has_all_monotone.
 Print Assumptions Boundary.procedure_satisfied_context_monotone.
 Print Assumptions Boundary.boundary_verified_context_monotone.
 
@@ -56,9 +65,11 @@ Print Assumptions Admissibility.escalation_blocks_unqualified.
 Print Assumptions Admissibility.verified_without_admission_blocks_unqualified.
 Print Assumptions Admissibility.invalid_admission_blocks_unqualified.
 Print Assumptions Admissibility.all_valid_dependencies_allow_unqualified.
+Print Assumptions Admissibility.dep_ok_false_of_not_verified.
 
 Print Assumptions Residual.residual_preservation.
 Print Assumptions Residual.residual_preservation_chain.
+Print Assumptions Residual.orphaned_entries_preserved.
 Print Assumptions Residual.orphan_escalation_sound.
 Print Assumptions Residual.nonadmitted_material_emits_residual.
 Print Assumptions Residual.admitted_verified_emits_no_open_residual.
