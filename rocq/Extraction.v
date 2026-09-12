@@ -31,4 +31,8 @@ Extraction "audit_kernel.ml"
   mkOpinion op_deps
   mkResidualEntry residual_assertion residual_state residual_owner RegisterLog
   is_orphaned orphaned_entries
-  Role Proposer Verifier mkProcess proc_role.
+  Role Proposer Verifier mkProcess process_id process_role
+  ProcessRegistry process_lookup
+  mkClassificationProposal proposal_id proposal_assertion proposal_classification proposal_process
+  mkAdmissionCertificate admission_proposal_id admission_verifier admission_decision
+  validate_admission.
