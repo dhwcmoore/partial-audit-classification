@@ -29,8 +29,10 @@ Extraction "audit_kernel.ml"
   mkBoundarySpec boundary_id boundary_version boundary_procedures
   procedure_satisfied classify has_fact has_all
   mkOpinion op_deps
-  mkResidualEntry residual_assertion residual_state residual_owner RegisterLog
+  mkResidualEntry residual_id residual_assertion residual_state residual_boundary_id
+  residual_boundary_version residual_context_id residual_reason residual_owner RegisterLog
   is_orphaned orphaned_entries
+  process_dependency classify_and_register
   Role Proposer Verifier mkProcess process_id process_role
   ProcessRegistry process_lookup
   mkClassificationProposal proposal_id proposal_assertion proposal_classification proposal_process

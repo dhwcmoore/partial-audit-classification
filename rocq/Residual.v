@@ -2,27 +2,66 @@ Require Import List.
 Import ListNotations.
 Require Import Coq.Strings.String.
 Require Import PAC.Base.
+Require Import PAC.Boundary.
+Require Import PAC.SelfAdmission.
+Require Import PAC.Admissibility.
 
-(** Residual.v — the residual register and Theorem 2 (Residual
-    Preservation): "Every non-affirmative classification of a material
-    assertion writes an entry to the residual register, and no workflow
-    operation deletes or downgrades an entry" (STTT Theorem 2, Section 8
-    "Formal Sketch" / AIS Theorem 6.3).
+(** Residual.v — the residual register: Residual Emission, Residual
+    Preservation, and Orphan Escalation (STTT "Formal Sketch" / AIS
+    Theorem 6.3). v0.1 combined emission and preservation into one
+    theorem; v0.2 separates them, since they are different claims about
+    different things:
 
-    The register is modelled as a list, and [step] is its only
-    permitted transition: strictly additive. There is deliberately no
-    constructor that removes or edits an existing entry, which is what
-    makes [residual_preservation] a monotonicity property rather than
-    an operational promise that some external process happens to keep. *)
+    - Residual Emission ([nonadmitted_material_emits_residual] /
+      [process_dependency]): every material dependency that is not
+      [dep_ok] (Admissibility.v: classified Verified *and* validly
+      admitted) automatically produces a matching residual entry. This
+      is new in v0.2 -- v0.1 required a caller to construct residual
+      entries by hand (see how Cases.v built [cleared_dashboard_log]
+      before this commit); the emission is now a proved property of a
+      function, not a convention Cases.v happened to follow.
+    - Residual Preservation ([residual_preservation],
+      [residual_preservation_chain]): once emitted, a residual entry is
+      never removed or edited by [step], the register's only permitted
+      transition. Carried over from v0.1 unchanged.
+    - Orphan Escalation ([orphan_escalation_sound]): an entry with no
+      declared owner is exactly what [orphaned_entries] returns. New in
+      v0.2; v0.1 had the query and its preservation across [step] but
+      not the soundness statement that ties the query to the property
+      it is supposed to detect.
+
+    v0.2 scope: this module does not model resolution or closure of a
+    residual. [step] is still the only transition, and it is still
+    purely additive; there is no [ResidualEvent] state machine, no
+    resolution certificate, and no "current open view" distinct from
+    the full history. That is a deliberate scope decision, not an
+    oversight discovered later: the frozen v0.2 target in
+    NON_CLAIMS.md commits to *emitting* a residual for every
+    non-admitted material result, not to modelling how residuals are
+    later closed. A dashboard-clearing operation is not representable
+    as anything other than a [step] that appends whatever new entries
+    the clearing workflow itself produces; it cannot remove existing
+    ones, but this module does not yet distinguish "still open" from
+    "closed" within the entries that remain. *)
 
 Record ResidualEntry (Assertion : Type) := mkResidualEntry {
-  residual_assertion : Assertion;
-  residual_state     : EvidenceState;
-  residual_owner     : option string  (* None marks an orphaned residual *)
+  residual_id              : ResidualId;
+  residual_assertion       : Assertion;
+  residual_state           : EvidenceState;
+  residual_boundary_id     : BoundaryId;
+  residual_boundary_version : nat;
+  residual_context_id      : ContextId;
+  residual_reason          : InadmissibilityReason Assertion;
+  residual_owner           : option OwnerId  (* None marks an orphaned residual *)
 }.
-Arguments mkResidualEntry {Assertion} _ _ _.
+Arguments mkResidualEntry {Assertion} _ _ _ _ _ _ _ _.
+Arguments residual_id {Assertion} _.
 Arguments residual_assertion {Assertion} _.
 Arguments residual_state {Assertion} _.
+Arguments residual_boundary_id {Assertion} _.
+Arguments residual_boundary_version {Assertion} _.
+Arguments residual_context_id {Assertion} _.
+Arguments residual_reason {Assertion} _.
 Arguments residual_owner {Assertion} _.
 
 Definition RegisterLog (Assertion : Type) := list (ResidualEntry Assertion).
@@ -76,4 +115,104 @@ Proof.
   unfold orphaned_entries in *.
   apply filter_In in Hin as [Hin Horph].
   apply filter_In; split; [eapply residual_preservation; eauto | exact Horph].
+Qed.
+
+(** Orphan Escalation: the query is sound, not merely preserved -- an
+    entry that is actually ownerless is exactly one the query returns.
+    ([orphaned_entries_preserved] above says a *found* orphan stays
+    found; this says the query finds every orphan there is.) *)
+Theorem orphan_escalation_sound :
+  forall {Assertion : Type} (log : RegisterLog Assertion) (e : ResidualEntry Assertion),
+    In e log -> residual_owner e = None -> In e (orphaned_entries log).
+Proof.
+  intros Assertion log e Hin Hnone.
+  unfold orphaned_entries. apply filter_In. split.
+  - exact Hin.
+  - unfold is_orphaned. rewrite Hnone. reflexivity.
+Qed.
+
+(** ** Residual Emission
+
+    [process_dependency] is the automatic-emission function: given the
+    declared boundary's identity and version, the evidence context's
+    identity, a fresh residual identifier, and a [DependencyPacket]
+    (Admissibility.v), it returns the dependency's classification
+    together with a residual entry exactly when the dependency is not
+    [dep_ok] -- not both Verified and validly admitted. The owner field
+    is left unassigned ([None]) at emission time: this function only
+    emits, it does not itself assign risk ownership. *)
+Definition process_dependency {Assertion : Type}
+    (registry : ProcessRegistry) (bid : BoundaryId) (bver : nat) (cid : ContextId)
+    (rid : ResidualId) (d : DependencyPacket Assertion)
+    : EvidenceState * option (ResidualEntry Assertion) :=
+  if dep_ok registry d
+  then (dep_state d, None)
+  else (dep_state d,
+        Some (mkResidualEntry rid (dep_assertion d) (dep_state d) bid bver cid (reason_for d) None)).
+
+Theorem nonadmitted_material_emits_residual :
+  forall {Assertion : Type} (registry : ProcessRegistry) (bid : BoundaryId) (bver : nat)
+    (cid : ContextId) (rid : ResidualId) (d : DependencyPacket Assertion),
+    dep_material d = true -> dep_ok registry d = false ->
+    exists e, snd (process_dependency registry bid bver cid rid d) = Some e /\
+              residual_assertion e = dep_assertion d /\ residual_state e = dep_state d.
+Proof.
+  intros Assertion registry bid bver cid rid d Hmat Hnok.
+  unfold process_dependency. rewrite Hnok.
+  eexists. repeat split.
+Qed.
+
+Theorem admitted_verified_emits_no_open_residual :
+  forall {Assertion : Type} (registry : ProcessRegistry) (bid : BoundaryId) (bver : nat)
+    (cid : ContextId) (rid : ResidualId) (d : DependencyPacket Assertion),
+    dep_ok registry d = true ->
+    snd (process_dependency registry bid bver cid rid d) = None.
+Proof.
+  intros Assertion registry bid bver cid rid d Hok.
+  unfold process_dependency. rewrite Hok. reflexivity.
+Qed.
+
+(** [classify_and_register] folds [process_dependency] over a list of
+    dependencies, handing out increasing residual identifiers and
+    threading a [RegisterLog]: every emitted entry is prepended, so the
+    resulting log extends the input log exactly as [step] permits (see
+    [classify_and_register_step] below). *)
+Fixpoint classify_and_register {Assertion : Type}
+    (registry : ProcessRegistry) (bid : BoundaryId) (bver : nat) (cid : ContextId)
+    (next_id : ResidualId) (deps : list (DependencyPacket Assertion)) (log : RegisterLog Assertion)
+    : list EvidenceState * RegisterLog Assertion :=
+  match deps with
+  | [] => ([], log)
+  | d :: rest =>
+      match process_dependency registry bid bver cid next_id d with
+      | (s, Some e) =>
+          let '(states, log') := classify_and_register registry bid bver cid (S next_id) rest (e :: log) in
+          (s :: states, log')
+      | (s, None) =>
+          let '(states, log') := classify_and_register registry bid bver cid next_id rest log in
+          (s :: states, log')
+      end
+  end.
+
+Theorem classify_and_register_step :
+  forall {Assertion : Type} (registry : ProcessRegistry) (bid : BoundaryId) (bver : nat)
+    (cid : ContextId) (next_id : ResidualId) (deps : list (DependencyPacket Assertion))
+    (log : RegisterLog Assertion),
+    steps log (snd (classify_and_register registry bid bver cid next_id deps log)).
+Proof.
+  intros Assertion registry bid bver cid next_id deps.
+  revert next_id.
+  induction deps as [| d rest IH]; intro next_id; simpl; intro log.
+  - apply steps_refl.
+  - destruct (process_dependency registry bid bver cid next_id d) as [s [e |]] eqn:Hpd.
+    + destruct (classify_and_register registry bid bver cid (S next_id) rest (e :: log))
+        as [states log'] eqn:Hrec.
+      simpl.
+      eapply steps_trans.
+      * exact (step_append log [e]).
+      * specialize (IH (S next_id) (e :: log)). rewrite Hrec in IH. exact IH.
+    + destruct (classify_and_register registry bid bver cid next_id rest log)
+        as [states log'] eqn:Hrec.
+      simpl.
+      specialize (IH next_id log). rewrite Hrec in IH. exact IH.
 Qed.

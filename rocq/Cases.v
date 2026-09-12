@@ -163,9 +163,22 @@ Module ContinuousAuditing.
                       end)
            (seq 0 10).
 
+  (** v0.2 note: this still builds the log directly from
+      [undefined_txns] rather than routing every transaction through
+      [process_dependency]/[classify_and_register]
+      (Residual.v) -- that refactor, and the admission certificates a
+      full pipeline run would also require for transactions 0 and 1,
+      is deferred to the Cases.v/pipeline refactor. The residual
+      entries below record the same boundary provenance
+      [process_dependency] would have recorded (this boundary's id and
+      version, evidence context id 0) and the same reason (not
+      Verified), so the two constructions agree on every field a
+      pipeline run would also produce for these ten transactions. *)
   Definition cleared_dashboard_log : RegisterLog CAAssertion :=
-    map (fun n => mkResidualEntry (Txn n)
-                    (classify boundary CAFactEq observed_evidence (Txn n)) None)
+    map (fun n =>
+           let s := classify boundary CAFactEq observed_evidence (Txn n) in
+           mkResidualEntry n (Txn n) s (boundary_id boundary) (boundary_version boundary) 0
+             (NotVerified (Txn n) s) None)
         undefined_txns.
 
   (** Eight of the ten transactions survive dashboard clearing as

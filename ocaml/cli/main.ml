@@ -93,7 +93,12 @@ let run_continuous_auditing () =
   let residuals =
     List.filter_map
       (fun (n, s) -> if s = Verified then None
-                     else Some { residual_assertion = Txn n; residual_state = s; residual_owner = None })
+                     else Some { residual_id = n; residual_assertion = Txn n; residual_state = s;
+                                 residual_boundary_id = ca_boundary.boundary_id;
+                                 residual_boundary_version = ca_boundary.boundary_version;
+                                 residual_context_id = 0;
+                                 residual_reason = NotVerified (Txn n, s);
+                                 residual_owner = None })
       states
   in
   Printf.printf "  Transactions:          10 (2 reviewed, 8 deprioritised)\n";

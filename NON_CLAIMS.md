@@ -83,12 +83,22 @@ closed under the global context with no `Admitted` and no `Axiom`.
   for *assigning* them is formalised here; the papers describe them
   qualitatively (Section 3) and this repository does not yet close that
   gap.
-- **No revocation.** The boundary machinery is monotone in the evidence
-  context (`has_fact_monotone`): nothing in this development retracts a
-  fact or downgrades a `Verified` classification once evidence is added.
-  Real audits sometimes need to un-verify something; that is out of scope
-  for v0.1, exactly as `RegisterLog`'s append-only `step` relation does not
-  model deletion.
+- **No revocation, and no residual resolution or closure.** The boundary
+  machinery is monotone in the evidence context
+  (`boundary_verified_context_monotone`): nothing in this development
+  retracts a fact or downgrades a `Verified` classification once evidence
+  is added. Real audits sometimes need to un-verify something; that is
+  out of scope, exactly as `RegisterLog`'s append-only `step` relation
+  does not model deletion. v0.2 adds automatic residual *emission*
+  (`process_dependency`, `classify_and_register` in `Residual.v`) but
+  deliberately does not add a resolution or closure mechanism: there is
+  no `ResidualEvent` state machine, no resolution certificate, and no
+  "current open view" distinct from the full history. A dashboard
+  clearing is representable only as a `step` that appends new entries;
+  it cannot remove existing ones, but nothing in this development marks
+  an existing entry as closed either. This is a stated v0.2 scope
+  decision (see NON_CLAIMS.md's v0.2 scope note above), not a gap
+  discovered after the fact.
 - **`independently_admitted` and `proposes`/`admits` are abstract.** This
   repository proves that a Proposer cannot also be a Verifier by
   construction of the `Role` type. It does not model *how* an organisation
