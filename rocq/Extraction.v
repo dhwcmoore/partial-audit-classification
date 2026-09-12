@@ -35,4 +35,8 @@ Extraction "audit_kernel.ml"
   ProcessRegistry process_lookup
   mkClassificationProposal proposal_id proposal_assertion proposal_classification proposal_process
   mkAdmissionCertificate admission_proposal_id admission_verifier admission_decision
-  validate_admission.
+  validate_admission
+  NotVerified MissingCertificate InvalidCertificate
+  Unqualified InadmissibleOpinion
+  mkDependencyPacket dep_assertion dep_material dep_state dep_proposal dep_certificate
+  dep_valid_admission dep_ok decide_opinion.
