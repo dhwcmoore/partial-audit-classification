@@ -18,8 +18,8 @@ individually confirmed closed under the global context
 This repository is the accompanying formal development for two manuscripts
 by the same author:
 
-- *A Discipline of Partial Audit Classification: On the Correct Treatment
-  of Undefined Audit Assertions* (in preparation for submission to
+- *A Discipline of Partial Audit Classification: A Machine-Checked Kernel
+  for Default-Free Audit Decisions* (in preparation for submission to
   *International Journal on Software Tools for Technology Transfer*)
 - *Boundary Discipline for Accounting Information Systems: On the Correct
   Treatment of Undefined Audit Assertions* (in preparation for submission

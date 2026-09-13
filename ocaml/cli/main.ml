@@ -69,7 +69,8 @@ let direct_bank_confirmation : (wfact, wassertion) procedure =
 let wirecard_boundary : (wfact, wassertion) boundarySpec =
   { boundary_id = 0; boundary_version = 1; boundary_procedures = [ direct_bank_confirmation ] }
 
-let wirecard_observed : wfact list = [ BankExistsIndependent; AccountIdentifierSupplied ]
+let wirecard_observed : wfact list =
+  [ BankExistsIndependent; JurisdictionPermitsDirectConfirmation; AccountIdentifierSupplied ]
 let wirecard_full : wfact list =
   [ BankExistsIndependent; ConfirmationRouteControlledByAuditor;
     JurisdictionPermitsDirectConfirmation; AccountIdentifierSupplied;
@@ -106,7 +107,7 @@ let print_fixture label input =
   Printf.printf "    Classification:  %s\n"
     (String.concat ", " (List.map string_of_state result.decision_classifications));
   Printf.printf "    Opinion:         %s\n" (string_of_opinion result.decision_opinion);
-  Printf.printf "    Open residuals:  %d\n" (List.length result.decision_residuals)
+  Printf.printf "    Residuals emitted:  %d\n" (List.length result.decision_residuals)
 
 let run_wirecard () =
   print_endline "Case 1: Wirecard cash-existence assertion (Section 7.1 / Section 7)";

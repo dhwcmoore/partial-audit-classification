@@ -69,13 +69,17 @@ Module Wirecard.
   Definition boundary : BoundarySpec WFact WAssertion :=
     mkBoundarySpec 0 1 [direct_bank_confirmation].
 
-  (** Observed evidence per Section 7.1: an independent bank exists and
-      an account identifier was supplied, but the confirmation route was
-      not controlled by the auditor, the jurisdiction did not permit
-      direct confirmation, and no authenticated channel was used. Three
-      of five preconditions fail. *)
+  (** Observed evidence per Section 7.1: an independent bank exists, an
+      account identifier was supplied, and the jurisdiction permits
+      direct confirmation -- the Philippine banks were reachable and, in
+      fact, responded promptly once asked directly in June 2020. What
+      was never established was that the confirmation route was
+      controlled by the auditor (it ran through a third-party trustee
+      for years) or that any response came through an authenticated
+      direct channel. Two of five preconditions fail; the jurisdiction
+      one does not. *)
   Definition observed_evidence : list WFact :=
-    [BankExistsIndependent; AccountIdentifierSupplied].
+    [BankExistsIndependent; JurisdictionPermitsDirectConfirmation; AccountIdentifierSupplied].
 
   Example wirecard_state_undefined :
     classify boundary WFactEq observed_evidence CashExistencePhilippineTrustee = Undefined.
