@@ -21,8 +21,8 @@ by the same author:
 - *A Discipline of Partial Audit Classification: A Machine-Checked Kernel
   for Default-Free Audit Decisions* (in preparation for submission to
   *International Journal on Software Tools for Technology Transfer*)
-- *Boundary Discipline for Accounting Information Systems: On the Correct
-  Treatment of Undefined Audit Assertions* (in preparation for submission
+- *Boundary Discipline for Accounting Information Systems: A Design-Science
+  Architecture for Preserving Verification Failure* (in preparation for submission
   to *International Journal of Digital Accounting Research*)
 
 Both papers describe the same underlying formalism from two different
